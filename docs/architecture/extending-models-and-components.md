@@ -1,0 +1,400 @@
+# Adding Fields and Modifying Pages in Your Fork
+
+This document covers the two most frequent customisation needs in detail:
+1. **Adding data to existing models** (e.g. a new field on `Issue`)
+2. **Modifying existing pages and components**
+
+Both require understanding exactly how the extension seam works in practice, not just in theory.
+
+---
+
+## Part 1 — Adding Fields to Existing Models
+
+### The core constraint
+
+Django's migration system ties each migration to a specific **app label**. When you write `migrations.AddField(model_name="issue", ...)`, Django looks up the `Issue` model through the `db` app's registry. You cannot add a field to `plane.db.models.Issue` from a migration in `plane.our_app` using the normal `AddField` operation — Django raises an error because it doesn't consider that model yours to alter.
+
+This leaves four real options, with very different tradeoffs.
+
+---
+
+### Option A — OneToOne extension model (recommended for many fields)
+
+Create a companion model in your own app that holds your extra fields.
+
+```python
+# apps/api/plane/our_app/models/issue_extension.py
+from plane.db.models import BaseModel
+from django.db import models
+
+class IssueExtension(BaseModel):
+    issue = models.OneToOneField(
+        "db.Issue",
+        on_delete=models.CASCADE,
+        related_name="our_extension",
+        primary_key=True,
+    )
+    customer_id    = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    severity       = models.CharField(max_length=50, blank=True, null=True)
+    internal_notes = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "our_issue_extensions"
+```
+
+Migration in `plane/our_app/migrations/` — zero collision with upstream.
+
+**Exposing it in the API:**
+
+You need new API endpoints because the upstream `IssueSerializer` doesn't know about `our_extension`. Two patterns:
+
+**Pattern 1 — Separate endpoint** (safest, zero upstream changes):
+```python
+# our_app/views/issue_extension.py
+class IssueExtensionView(APIView):
+    def get(self, request, workspace_slug, project_id, issue_id):
+        ext, _ = IssueExtension.objects.get_or_create(issue_id=issue_id)
+        return Response(IssueExtensionSerializer(ext).data)
+
+    def patch(self, request, workspace_slug, project_id, issue_id):
+        ext, _ = IssueExtension.objects.get_or_create(issue_id=issue_id)
+        serializer = IssueExtensionSerializer(ext, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+```
+
+Frontend fetches this alongside the normal issue data and merges in the store.
+
+**Pattern 2 — Annotated queryset in your own issue view** (if you want a single response):
+
+Override the issue retrieve endpoint in your `our_app/views/`, call `select_related("our_extension")`, and return a combined serializer. Duplicate some upstream view logic, but it's isolated to your app.
+
+**Drawback:** The upstream issue list views (which you don't control) won't include your fields. You'd need to handle that either via a separate field-fetch per issue (inefficient) or by overriding the list view too.
+
+---
+
+### Option B — Direct column addition with RunSQL (recommended for 1–2 fields on a hot model)
+
+Add the column directly to the upstream table with a `RunSQL` migration in your app, then add the field to the model file.
+
+**Step 1 — Migration in your app:**
+```python
+# our_app/migrations/0003_issue_customer_id.py
+from django.db import migrations
+
+class Migration(migrations.Migration):
+    dependencies = [
+        ("our_app", "0002_previous"),
+        ("db", "0121_alter_estimate_type"),  # pin to latest known upstream
+    ]
+    operations = [
+        migrations.RunSQL(
+            sql="""
+                ALTER TABLE issues
+                ADD COLUMN IF NOT EXISTS customer_id VARCHAR(255) NULL;
+                CREATE INDEX IF NOT EXISTS issues_customer_id_idx ON issues(customer_id);
+            """,
+            reverse_sql="ALTER TABLE issues DROP COLUMN IF EXISTS customer_id;",
+        ),
+    ]
+```
+
+**Step 2 — Add the field to the model (touch `plane/db/models/issue.py`):**
+```python
+# In Issue model — add one line
+customer_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+```
+
+**Merge strategy when upstream adds a migration to `plane.db`:**
+
+```bash
+git merge upstream/preview
+# Conflict: possibly in issue.py if upstream also added a field (rare)
+# No conflict in migrations (your migration file has a new name, upstream's is different)
+
+# After merge, update your migration's dependency pin:
+#   ("db", "0122_whatever_upstream_added"),
+```
+
+Updating the `dependencies` pin in your migration after each upstream release is a one-line change that takes 30 seconds.
+
+**Conflict risk on `issue.py`:** In practice, upstream adds fields to `Issue` roughly once per month. When it happens, the conflict is two `AddField` lines next to each other — trivially resolved. The migration file itself never conflicts because it has a unique name.
+
+**Benefit:** The field is on the actual `Issue` model. All upstream serializers, querysets, and filters work naturally. The upstream `IssueSerializer` already uses `exclude = ["description_json", "description_stripped"]` and `read_only_fields` — your field will be included in responses automatically.
+
+---
+
+### Option C — JSONField on an extension model (for very dynamic extra data)
+
+If you have a large and unpredictable set of custom fields (like Plane Pro's custom fields feature), a JSONField is more flexible than adding individual columns:
+
+```python
+class IssueCustomFields(BaseModel):
+    issue = models.OneToOneField("db.Issue", on_delete=models.CASCADE, related_name="custom_fields")
+    data  = models.JSONField(default=dict)
+
+    class Meta:
+        db_table = "our_issue_custom_fields"
+```
+
+**Tradeoff:** Flexible but not queryable with normal ORM filters. Good for display-only custom metadata; bad for filtering/sorting issues by those values without raw SQL.
+
+---
+
+### Option D — Fork the model directly (use cautiously)
+
+Add the field directly to `Issue` and create a migration in `plane/db/migrations/`. Use a **high-numbered prefix** to avoid collisions:
+
+```python
+# plane/db/migrations/9001_our_customer_id.py
+class Migration(migrations.Migration):
+    dependencies = [
+        ("db", "0121_alter_estimate_type"),
+    ]
+    operations = [
+        migrations.AddField(
+            model_name="issue",
+            name="customer_id",
+            field=models.CharField(max_length=255, blank=True, null=True),
+        ),
+    ]
+```
+
+Prefix `9000+` is safe — upstream won't reach that range before you'd need to rebase anyway.
+
+**Risk:** On every upstream merge, you need to check if upstream added a `0122_xxx.py` and update your `9001` to depend on it. Miss this once and migrations break silently. It's manageable with the automated merge procedure but adds a consistent maintenance step.
+
+---
+
+### Decision guide
+
+| Scenario | Recommendation |
+|----------|---------------|
+| 1–3 fields, need them in list views and filters | Option B (RunSQL + model edit) |
+| Many fields, only used in detail view | Option A (OneToOne extension) |
+| Dynamic user-defined fields (Notion-like) | Option C (JSONField extension) |
+| You're comfortable accepting a merge step | Option D (direct) |
+
+---
+
+## Part 2 — Modifying Existing Pages and Components
+
+### The two-tier reality
+
+Not all files in the codebase are equally safe to touch. After reading every `app/` file that imports from `@/plane-web`:
+
+**Tier 1 — Fully overridable via your edition layer (no conflict risk)**
+
+These `app/` files import their main component from `@/plane-web/`, so your `oe/` folder controls what renders:
+
+| File | Overridable via `oe/` |
+|------|-----------------------|
+| `[workspaceSlug]/layout.tsx` | `WorkspaceContentWrapper`, `GlobalModals` |
+| `projects/(list)/page.tsx` | `ProjectPageRoot` |
+| `browse/[workItem]/page.tsx` | `WorkItemDetailRoot` ← **this is the full issue detail page** |
+| `active-cycles/page.tsx` | `WorkspaceActiveCyclesRoot` |
+| `analytics/[tabId]/page.tsx` | `useAnalyticsTabs` |
+| `settings/billing/page.tsx` | `BillingRoot` |
+| All issue headers | `IssuesHeader` |
+| All breadcrumb headers | `CommonProjectBreadcrumbs` |
+| Pages list/detail | `EPageStoreType`, `usePageStore`, `usePage` |
+
+Additionally, 330 places in `core/` delegate to `@/plane-web/` for specific sub-components. The most important ones for customising the issue experience:
+
+| Import in `core/` | What it controls |
+|-------------------|----------------|
+| `@/plane-web/components/issues/issue-details/additional-properties` | Extra fields in the issue sidebar |
+| `@/plane-web/components/issues/issue-modal/modal-additional-properties` | Extra fields in create/edit modal |
+| `@/plane-web/components/issues/worklog/property` | Worklog field in sidebar |
+| `@/plane-web/components/cycles/additional-actions` | Extra buttons on cycle list items |
+| `@/plane-web/components/issues/header` | Issues page header bar |
+| `@/plane-web/components/workspace/content-wrapper` | Workspace layout wrapper |
+| `@/plane-web/components/common/modal/global` | Global modal registry |
+
+**Tier 2 — Thin app/ files, safe to own directly**
+
+These `app/` files import from `@/components` (core) and have no `@/plane-web` hook yet. They are very thin (10–25 lines), mostly just calling one core component:
+
+```tsx
+// issues/(list)/page.tsx — 25 lines total, just calls ProjectLayoutRoot
+<ProjectLayoutRoot />
+```
+
+You have two sub-options here:
+
+**Sub-option 2a — Modify the `app/` file directly.** Since these files are so thin, merging upstream changes is easy. When upstream changes `app/[workspaceSlug]/.../issues/(list)/page.tsx`, it will almost always be: changing what component it calls, or adding a prop. A `git diff` shows this immediately and you re-apply your change in seconds.
+
+**Sub-option 2b — Add an `@/plane-web` hook to the core component** (the cleaner approach). Touch `core/` once to add a single import, then never touch `core/` again:
+
+```tsx
+// core/components/issues/issue-layouts/roots/project-layout-root.tsx
+// Add one import:
+import { ProjectLayoutRootWrapper } from "@/plane-web/components/issues/issue-layouts/root-wrapper";
+
+// Wrap the return:
+return (
+  <ProjectLayoutRootWrapper>
+    {/* existing content */}
+  </ProjectLayoutRootWrapper>
+);
+```
+
+Then your `oe/` provides `ProjectLayoutRootWrapper` as either a passthrough (`<>{children}</>`) or something that adds UI. Future merges: if upstream changes `project-layout-root.tsx`, you re-add your one-line wrapper import — easily auditable.
+
+---
+
+### Concrete walkthrough: adding a custom field to the issue sidebar
+
+This is the most common customisation. Here's the full stack end-to-end.
+
+**1. Backend — add the field (Option B from above):**
+```python
+# our_app/migrations/0003_issue_customer_id.py
+migrations.RunSQL("ALTER TABLE issues ADD COLUMN IF NOT EXISTS customer_id VARCHAR(255) NULL;")
+
+# plane/db/models/issue.py — add field to Issue model
+customer_id = models.CharField(max_length=255, blank=True, null=True)
+```
+
+**2. API — field is now automatically included** in the upstream `IssueSerializer` response (because it uses `exclude` not `fields`). No serializer changes needed for read. For write, add it to the view's `update()` logic or it'll be accepted automatically via DRF's model serializer.
+
+**3. Frontend — types** (`packages/types/` or your `oe/types/`):
+```ts
+// Extend the upstream IIssue type
+export interface IIssueExtended extends IIssue {
+  customer_id?: string | null;
+}
+```
+
+**4. Frontend — store** (`oe/store/issue/`): the upstream stores already merge all API response fields into the MobX observable. Since your field is now in the API response, it's in the store automatically. No store change needed unless you want type-safe access.
+
+**5. Frontend — sidebar component** (`oe/components/issues/issue-details/additional-properties.tsx`):
+
+This file is already the designed injection point. The CE version (`ce/components/issues/issue-details/additional-properties.tsx`) returns `<>/<>`. Replace it in your edition layer:
+
+```tsx
+// oe/components/issues/issue-details/additional-properties.tsx
+import { observer } from "mobx-react";
+import { useIssueDetail } from "@/hooks/store/use-issue-detail";
+
+export type TWorkItemAdditionalSidebarProperties = {
+  workItemId: string;
+  workItemTypeId: string | null;
+  projectId: string;
+  workspaceSlug: string;
+  isEditable: boolean;
+  isPeekView?: boolean;
+};
+
+export const WorkItemAdditionalSidebarProperties = observer(
+  function WorkItemAdditionalSidebarProperties({ workItemId, isEditable }: TWorkItemAdditionalSidebarProperties) {
+    const { issue: { getIssueById } } = useIssueDetail();
+    const issue = getIssueById(workItemId) as any; // use your extended type
+
+    return (
+      <div className="py-2 border-t border-subtle">
+        <label className="text-xs font-medium text-secondary">Customer ID</label>
+        <input
+          value={issue?.customer_id ?? ""}
+          disabled={!isEditable}
+          onChange={(e) => {/* call your patch API */}}
+          className="w-full mt-1 text-sm"
+        />
+      </div>
+    );
+  }
+);
+```
+
+**Result:** The field appears in the issue sidebar on every issue. Zero files modified in `core/` or `ce/`. The only upstream-touching files are:
+- `issue.py` (model field addition — rare conflict)
+- `our_app/migrations/0003_issue_customer_id.py` (your file, no conflict possible)
+
+---
+
+### Concrete walkthrough: modifying the issue list page
+
+Suppose you want to add a banner above the issues list. The `issues/(list)/page.tsx` file does not go through `@/plane-web`. You have two choices:
+
+**Choice A — Edit `app/.../issues/(list)/page.tsx` directly:**
+```tsx
+// Add your banner before ProjectLayoutRoot
+return (
+  <>
+    <PageHead title={pageTitle} />
+    <OurFeatureBanner projectId={projectId} />   {/* your addition */}
+    <div className="h-full w-full">
+      <ProjectLayoutRoot />
+    </div>
+  </>
+);
+```
+
+File is 25 lines. When upstream changes it, the diff will be obvious and your banner line re-applies in seconds. This is acceptable for thin route files.
+
+**Choice B — Add a hook to `core/` once:**
+```tsx
+// core/components/issues/issue-layouts/roots/project-layout-root.tsx
+// Add at the top:
+import { ProjectIssueListBanner } from "@/plane-web/components/issues/issue-layouts/banner";
+
+// Add in the JSX:
+return (
+  <IssuesStoreContext.Provider value={EIssuesStoreType.PROJECT}>
+    <ProjectIssueListBanner workspaceSlug={workspaceSlug} projectId={projectId} />
+    {/* existing content */}
+  </IssuesStoreContext.Provider>
+);
+```
+
+Then in `oe/`:
+```tsx
+// oe/components/issues/issue-layouts/banner.tsx
+export function ProjectIssueListBanner({ projectId }) {
+  return <OurBannerContent projectId={projectId} />;
+}
+```
+
+After the initial touch to `core/`, you never need to touch it again — even when upstream changes `project-layout-root.tsx`, they won't remove your one wrapper import (it's a compile error if they do, which you'd catch in CI immediately).
+
+---
+
+### Handling upstream changes to components you've overridden
+
+When you override a CE component in `oe/`, you hold a **static copy** of its interface. If upstream changes the prop types or behaviour of the slot, your override might become stale.
+
+**Catching prop changes automatically:**
+
+Export and re-use the CE type in your override:
+```ts
+// In your oe/ component:
+import type { TWorkItemAdditionalSidebarProperties } from "@/plane-web/components/issues/issue-details/additional-properties";
+
+// Your implementation must satisfy the same type:
+export function WorkItemAdditionalSidebarProperties(props: TWorkItemAdditionalSidebarProperties) { ... }
+```
+
+Since the type comes from your `oe/` (which you control), this only helps if upstream changes the type through `core/` and the call site changes. Run `pnpm check:types` after every upstream merge — TypeScript will surface mismatches at the point of use in `core/`.
+
+**Catching behavioural drift:**
+
+Add integration tests for your custom components that assert the expected props flow. When the test fails after a merge, you know something changed. This is more valuable than manual review.
+
+---
+
+### Summary table
+
+| What you want to do | Where to write code | Upstream file touched? |
+|---------------------|--------------------|-----------------------|
+| New field in issue sidebar | `oe/components/issues/issue-details/additional-properties.tsx` | `issue.py` (1 line) |
+| New field in create/edit modal | `oe/components/issues/issue-modal/modal-additional-properties.tsx` | `issue.py` (1 line) |
+| Extra button on cycle list | `oe/components/cycles/additional-actions.tsx` | none |
+| Wrap the workspace layout | `oe/components/workspace/content-wrapper.tsx` | none |
+| Add content to issue list page | `app/.../issues/(list)/page.tsx` (edit directly) OR add hook to `core/` | `page.tsx` (25 lines) |
+| Completely replace issue detail | `oe/components/browse/workItem-detail.tsx` | none |
+| Add a new settings page | New file in `app/.../settings/` | none |
+| New data on Issue model (1-2 fields) | `our_app/migrations/RunSQL` + `issue.py` | `issue.py` (1 line) |
+| New data on Issue model (many fields) | `our_app/models/IssueExtension` (OneToOne) | none |
+| New model entirely | `our_app/models/` | none |
+| New API endpoint | `our_app/views/` + `our_app/urls.py` | `plane/urls.py` (1 line) |
