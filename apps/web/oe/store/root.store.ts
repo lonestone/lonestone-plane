@@ -5,6 +5,8 @@
  */
 
 import { CoreRootStore } from "@/store/root.store";
+import type { IProjectTemplateStore } from "./templates/project-template.store";
+import { ProjectTemplateStore } from "./templates/project-template.store";
 
 /**
  * Lonestone edition root store.
@@ -13,5 +15,10 @@ import { CoreRootStore } from "@/store/root.store";
  * Instantiated via StoreProvider — do not construct CoreRootStore directly in app code.
  */
 export class RootStore extends CoreRootStore {
-  
+  projectTemplates: IProjectTemplateStore;
+
+  constructor() {
+    super();
+    this.projectTemplates = new ProjectTemplateStore(this);
+  }
 }
