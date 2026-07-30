@@ -14,6 +14,11 @@
 #   ./tools/release-lonestone.sh 2 --dry-run       # print commands, execute nothing
 #   ./tools/release-lonestone.sh 1 --force         # overwrite an already published tag
 #
+# Configuration is per-machine and lives in tools/release.env (gitignored) or in
+# the environment — nothing about one developer's setup is hardcoded here:
+#   PLANE_REGISTRY_NS    required. Docker Hub namespace to push to.
+#   PLANE_FORK_SUFFIX    optional, defaults to "lonestone".
+#
 # WARNING — VITE_* variables are frozen into the bundle at build time (web,
 # admin and space apps). If deployment URLs change, retagging is NOT enough:
 # fill in tools/release.env (see release.env.example) so they are passed as
@@ -21,10 +26,7 @@
 
 set -euo pipefail
 
-REGISTRY_NS="fath57"
-FORK_SUFFIX="lonestone"
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TEST_STACK_ENV="${HOME}/projects/plane-v1-test/.env"
 
 # service|dockerfile|context
 IMAGES=(
@@ -39,6 +41,7 @@ IMAGES=(
 die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
 info() { printf '\033[36m==>\033[0m %s\n' "$*"; }
 ok() { printf '\033[32m  ok\033[0m %s\n' "$*"; }
+warn() { printf '\033[33mwarning:\033[0m %s\n' "$*"; }
 
 ITERATION=""
 DO_PUSH=1
@@ -50,7 +53,8 @@ while [ $# -gt 0 ]; do
     --no-push) DO_PUSH=0 ;;
     --dry-run) DRY_RUN=1 ;;
     --force)   FORCE=1 ;;
-    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Print the header block, however long it is — no line numbers to drift
+    -h|--help) awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
     -*)        die "unknown option: $1" ;;
     *)         [ -z "$ITERATION" ] || die "iteration already provided ($ITERATION)"; ITERATION="$1" ;;
   esac
@@ -62,22 +66,40 @@ done
 
 cd "$REPO_ROOT"
 
+# --- per-machine configuration ----------------------------------------------
+# tools/release.env is gitignored: it holds this machine's registry namespace and
+# any VITE_* overrides. Environment variables win over the file.
+BUILD_ARGS=()
+if [ -f tools/release.env ]; then
+  info "reading tools/release.env"
+  while IFS='=' read -r key value; do
+    key="${key%"${key##*[![:space:]]}"}"          # trim trailing space
+    [[ "$key" =~ ^[[:space:]]*# ]] && continue
+    [ -z "$key" ] && continue
+    case "$key" in
+      VITE_*)  BUILD_ARGS+=(--build-arg "${key}=${value}") ;;
+      PLANE_*) [ -z "${!key:-}" ] && export "$key=$value" ;;
+      *)       printf '\033[33mwarning:\033[0m ignoring unknown key in release.env: %s\n' "$key" ;;
+    esac
+  done < tools/release.env
+fi
+
+REGISTRY_NS="${PLANE_REGISTRY_NS:-}"
+FORK_SUFFIX="${PLANE_FORK_SUFFIX:-lonestone}"
+
+[ -n "$REGISTRY_NS" ] || die "PLANE_REGISTRY_NS is not set.
+  Set the Docker Hub namespace to push to, either in the environment or in
+  tools/release.env (copy tools/release.env.example to start).
+  Example:  PLANE_REGISTRY_NS=my-org"
+
+# Each variable contributes two array elements: "--build-arg" and "KEY=VALUE"
+[ ${#BUILD_ARGS[@]} -gt 0 ] && info "$(( ${#BUILD_ARGS[@]} / 2 )) VITE_* override(s) will be passed as --build-arg"
+
 # --- upstream version -------------------------------------------------------
 [ -f package.json ] || die "package.json not found at repo root"
 VERSION="$(python3 -c 'import json;print(json.load(open("package.json"))["version"])')"
 [ -n "$VERSION" ] || die "could not read version from package.json"
 TAG="v${VERSION}-${FORK_SUFFIX}.${ITERATION}"
-
-# --- optional VITE_* build args ---------------------------------------------
-BUILD_ARGS=()
-if [ -f tools/release.env ]; then
-  info "tools/release.env found — passing VITE_* variables as --build-arg"
-  while IFS='=' read -r key value; do
-    [[ "$key" =~ ^[[:space:]]*# ]] && continue
-    [ -z "$key" ] && continue
-    BUILD_ARGS+=(--build-arg "${key}=${value}")
-  done < tools/release.env
-fi
 
 # --- guardrails -------------------------------------------------------------
 info "release $TAG  (upstream $VERSION, iteration $ITERATION)"
@@ -127,13 +149,6 @@ if [ "$DO_PUSH" -eq 1 ]; then
   done
 else
   info "push skipped (--no-push)"
-fi
-
-# --- bump the test stack ----------------------------------------------------
-if [ -f "$TEST_STACK_ENV" ]; then
-  info "updating PLANE_TAG in $TEST_STACK_ENV"
-  run sed -i "s/^PLANE_TAG=.*/PLANE_TAG=${TAG}/" "$TEST_STACK_ENV"
-  ok "PLANE_TAG=${TAG}"
 fi
 
 # --- summary ----------------------------------------------------------------
