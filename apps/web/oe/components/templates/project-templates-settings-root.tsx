@@ -55,7 +55,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
       setToast({
         type: TOAST_TYPE.ERROR,
         title: t("error"),
-        message: t("templates.form.project.template.name.validation.required"),
+        message: t("templates.settings.form.project.template.name.validation.required"),
       });
       return;
     }
@@ -123,17 +123,17 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={t("templates.form.project.template.name.placeholder")}
+              placeholder={t("templates.settings.form.project.template.name.placeholder")}
               className="w-full"
             />
             <TextArea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("templates.form.project.template.description.placeholder")}
+              placeholder={t("templates.settings.form.project.template.description.placeholder")}
               className="min-h-20 w-full"
             />
             <Button variant="primary" size="sm" onClick={handleCreate} disabled={isSubmitting}>
-              {t("templates.form.project.button.create")}
+              {t("templates.settings.form.project.button.create")}
             </Button>
           </div>
         )}
