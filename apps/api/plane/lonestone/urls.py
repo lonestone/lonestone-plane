@@ -2,12 +2,21 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Lonestone edition URL routes.
+"""Lonestone edition URL routes."""
 
-Add feature endpoints under this module (e.g. templates) so they stay
-outside upstream `plane.app` / `plane.api` and avoid merge conflicts.
-"""
+from django.urls import path
 
-urlpatterns: list = [
-    # path("templates/", include("plane.lonestone.templates.urls")),
+from plane.lonestone.views import ProjectTemplateEndpoint
+
+urlpatterns = [
+    path(
+        "workspaces/<str:slug>/project-templates/",
+        ProjectTemplateEndpoint.as_view(),
+        name="lonestone-project-templates",
+    ),
+    path(
+        "workspaces/<str:slug>/project-templates/<uuid:pk>/",
+        ProjectTemplateEndpoint.as_view(),
+        name="lonestone-project-template-detail",
+    ),
 ]
