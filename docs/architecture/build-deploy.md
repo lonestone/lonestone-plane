@@ -2,14 +2,14 @@
 
 ## Monorepo Toolchain
 
-| Tool | Version | Role |
-|------|---------|------|
-| pnpm | 9.x | Package manager + workspace |
-| Turborepo | 2.9.14 | Build orchestration & caching |
-| Vite | 6.x | Frontend bundler (web, space, admin) |
-| tsdown | — | TypeScript bundler (live, packages) |
-| Docker | — | Container images for all services |
-| Caddy | 2.11.3 | Reverse proxy (custom xcaddy build) |
+| Tool      | Version | Role                                 |
+| --------- | ------- | ------------------------------------ |
+| pnpm      | 9.x     | Package manager + workspace          |
+| Turborepo | 2.9.14  | Build orchestration & caching        |
+| Vite      | 6.x     | Frontend bundler (web, space, admin) |
+| tsdown    | —       | TypeScript bundler (live, packages)  |
+| Docker    | —       | Container images for all services    |
+| Caddy     | 2.11.3  | Reverse proxy (custom xcaddy build)  |
 
 ---
 
@@ -33,14 +33,15 @@ All JavaScript dependency versions are **pinned in a central catalog** inside `p
 
 `turbo.json` defines these tasks:
 
-| Task | Depends on | Cached | Output |
-|------|-----------|--------|--------|
-| `build` | `^build` (upstream packages first) | yes | `dist/`, `build/`, `.react-router/` |
-| `dev` | `^build` | no | — (persistent) |
-| `check` | — | yes | — (lint/type check) |
-| `test` | — | yes | coverage reports |
+| Task    | Depends on                         | Cached | Output                              |
+| ------- | ---------------------------------- | ------ | ----------------------------------- |
+| `build` | `^build` (upstream packages first) | yes    | `dist/`, `build/`, `.react-router/` |
+| `dev`   | `^build`                           | no     | — (persistent)                      |
+| `check` | —                                  | yes    | — (lint/type check)                 |
+| `test`  | —                                  | yes    | coverage reports                    |
 
 Global env vars that bust the Turbo cache (changes trigger rebuild):
+
 ```
 APP_VERSION, NODE_ENV, LOG_LEVEL
 VITE_API_BASE_URL, VITE_WEB_BASE_URL, VITE_SPACE_BASE_URL
@@ -79,12 +80,12 @@ This pattern keeps the final image small by excluding dev dependencies and build
 
 #### Per-app details
 
-| App | Dockerfile | Build output | Runtime |
-|-----|-----------|-------------|---------|
-| `web` | `Dockerfile.web` | `dist/` (static) | Nginx |
-| `space` | `Dockerfile.space` | `build/` | react-router-serve (SSR) |
-| `admin` | `Dockerfile.admin` | `build/` (static) | Nginx |
-| `live` | `Dockerfile.live` | `dist/` | `node apps/live` |
+| App     | Dockerfile         | Build output      | Runtime                  |
+| ------- | ------------------ | ----------------- | ------------------------ |
+| `web`   | `Dockerfile.web`   | `dist/` (static)  | Nginx                    |
+| `space` | `Dockerfile.space` | `build/`          | react-router-serve (SSR) |
+| `admin` | `Dockerfile.admin` | `build/` (static) | Nginx                    |
+| `live`  | `Dockerfile.live`  | `dist/`           | `node apps/live`         |
 
 **web and admin** are static SPAs — built with Vite, served by Nginx with SPA fallback routing (`404 → /index.html`).
 
@@ -108,12 +109,12 @@ COPY . .
 
 The same image is reused for **four container roles**, differentiated by the entrypoint command:
 
-| Container | Command |
-|-----------|---------|
-| `api` | `./bin/docker-entrypoint-api.sh` — runs Gunicorn/Uvicorn |
-| `worker` | `./bin/docker-entrypoint-worker.sh` — runs Celery worker |
-| `beat-worker` | `./bin/docker-entrypoint-beat.sh` — runs Celery beat |
-| `migrator` | `./bin/docker-entrypoint-migrator.sh` — runs `manage.py migrate`, then exits |
+| Container     | Command                                                                      |
+| ------------- | ---------------------------------------------------------------------------- |
+| `api`         | `./bin/docker-entrypoint-api.sh` — runs Gunicorn/Uvicorn                     |
+| `worker`      | `./bin/docker-entrypoint-worker.sh` — runs Celery worker                     |
+| `beat-worker` | `./bin/docker-entrypoint-beat.sh` — runs Celery beat                         |
+| `migrator`    | `./bin/docker-entrypoint-migrator.sh` — runs `manage.py migrate`, then exits |
 
 ---
 
@@ -160,6 +161,7 @@ plane-minio    :9000, :9090 → MinIO object storage
 ```
 
 **Startup order** (via `depends_on`):
+
 ```
 plane-db, plane-redis
   → migrator (one-shot)
@@ -181,23 +183,56 @@ plane-db, plane-redis
   - `8000` — Django API
 - Custom bridge network: `dev_env`
 
+#### Lonestone: MinIO uploads via local proxy overlay
+
+Upstream `docker-compose-local.yml` has **no reverse proxy**. With `USE_MINIO=1`, the API signs upload URLs as `http://localhost:8000/{BUCKET_NAME}` (same host as the API), expecting a proxy to forward that path to MinIO — the same model as production Caddy (`/{BUCKET_NAME}` → `plane-minio:9000`).
+
+Without a proxy, `POST http://localhost:8000/uploads` hits Django and returns **404**.
+
+Lonestone keeps upstream compose untouched and adds an overlay:
+
+| File                                    | Purpose                                             |
+| --------------------------------------- | --------------------------------------------------- | ----- | -------------------------------------- |
+| `docker-compose.lonestone.yml`          | Puts Caddy on host `:8000`; API stays internal-only |
+| `deployments/lonestone/Caddyfile.local` | `/api                                               | /auth | /static`→ API,`/{BUCKET_NAME}` → MinIO |
+
+```bash
+# Start local stack with Lonestone MinIO proxy
+docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml up -d
+```
+
+Required `apps/api/.env` values when the API runs **in Docker**:
+
+```env
+USE_MINIO=1
+AWS_S3_ENDPOINT_URL="http://plane-minio:9000"
+WEB_URL="http://localhost:8000"
+```
+
+Notes:
+
+- Use `http://plane-minio:9000` (Docker DNS), not `http://localhost:9000` — inside the API container, `localhost` is not MinIO.
+- Root `.env` already uses the Docker hostname for MinIO; `apps/api/.env` is what `docker-compose-local.yml` loads for api/worker/beat — keep them aligned.
+- Do not edit `docker-compose-local.yml` or `apps/proxy/Caddyfile.ce` for this; the overlay avoids upstream merge conflicts.
+
 ---
 
 ## Proxy Routing (Caddyfile.ce)
 
 All public traffic enters through Caddy on port 80/443. Routes are evaluated in order:
 
-| Path pattern | Target | Notes |
-|-------------|--------|-------|
-| `/spaces/*` | `space:3000` | Public boards |
-| `/live/*` | `live:3000` | WebSocket collaboration |
-| `/api/*` | `api:8000` | REST API |
-| `/auth/*` | `api:8000` | Auth endpoints |
-| `/static/*` | `api:8000` | Django static files |
-| `/{BUCKET_NAME}*` | `plane-minio:9000` | Object storage |
-| `/*` (catch-all) | `web:3000` | Main SPA |
+| Path pattern      | Target             | Notes                   |
+| ----------------- | ------------------ | ----------------------- |
+| `/spaces/*`       | `space:3000`       | Public boards           |
+| `/live/*`         | `live:3000`        | WebSocket collaboration |
+| `/api/*`          | `api:8000`         | REST API                |
+| `/auth/*`         | `api:8000`         | Auth endpoints          |
+| `/static/*`       | `api:8000`         | Django static files     |
+| `/{BUCKET_NAME}*` | `plane-minio:9000` | Object storage          |
+| `/*` (catch-all)  | `web:3000`         | Main SPA                |
 
 **Global Caddy settings:**
+
 - Request body size limit: `FILE_SIZE_LIMIT` env var (default 5 MB)
 - Client IP forwarding: `X-Forwarded-For`, `X-Real-IP`
 - Trusted proxies: `TRUSTED_PROXIES` env var
@@ -226,74 +261,74 @@ The **admin panel** (`/god-mode/*`) is served by the `web` container, which hand
 
 ### API container (`.env`)
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `DATABASE_URL` | yes* | — | Postgres connection string (or use individual vars) |
-| `POSTGRES_DB/HOST/USER/PASSWORD/PORT` | yes* | — | Individual Postgres config |
-| `REDIS_URL` | yes | — | Redis connection string |
-| `AMQP_URL` or `RABBITMQ_*` | yes | — | Celery broker |
-| `AWS_ACCESS_KEY_ID` | yes | — | S3/MinIO access key |
-| `AWS_SECRET_ACCESS_KEY` | yes | — | S3/MinIO secret key |
-| `AWS_STORAGE_BUCKET_NAME` | yes | `uploads` | S3 bucket name |
-| `AWS_S3_ENDPOINT_URL` | CE | — | MinIO endpoint (for CE self-hosted) |
-| `SECRET_KEY` | yes | — | Django secret key |
-| `WEB_URL` | yes | — | Frontend origin (for CORS/redirects) |
-| `CORS_ALLOWED_ORIGINS` | no | allow all | Comma-separated allowed origins |
-| `FILE_SIZE_LIMIT` | no | `5242880` | Max upload size in bytes |
-| `ENABLE_READ_REPLICA` | no | `0` | Enable PostgreSQL read replica |
+| Variable                              | Required | Default   | Description                                         |
+| ------------------------------------- | -------- | --------- | --------------------------------------------------- |
+| `DATABASE_URL`                        | yes\*    | —         | Postgres connection string (or use individual vars) |
+| `POSTGRES_DB/HOST/USER/PASSWORD/PORT` | yes\*    | —         | Individual Postgres config                          |
+| `REDIS_URL`                           | yes      | —         | Redis connection string                             |
+| `AMQP_URL` or `RABBITMQ_*`            | yes      | —         | Celery broker                                       |
+| `AWS_ACCESS_KEY_ID`                   | yes      | —         | S3/MinIO access key                                 |
+| `AWS_SECRET_ACCESS_KEY`               | yes      | —         | S3/MinIO secret key                                 |
+| `AWS_STORAGE_BUCKET_NAME`             | yes      | `uploads` | S3 bucket name                                      |
+| `AWS_S3_ENDPOINT_URL`                 | CE       | —         | MinIO endpoint (for CE self-hosted)                 |
+| `SECRET_KEY`                          | yes      | —         | Django secret key                                   |
+| `WEB_URL`                             | yes      | —         | Frontend origin (for CORS/redirects)                |
+| `CORS_ALLOWED_ORIGINS`                | no       | allow all | Comma-separated allowed origins                     |
+| `FILE_SIZE_LIMIT`                     | no       | `5242880` | Max upload size in bytes                            |
+| `ENABLE_READ_REPLICA`                 | no       | `0`       | Enable PostgreSQL read replica                      |
 
 ### Frontend apps (`.env` with `VITE_` prefix)
 
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_BASE_URL` | Django API URL (e.g. `http://localhost:8000`) |
-| `VITE_WEB_BASE_URL` | Main app URL |
-| `VITE_SPACE_BASE_URL` | Space app URL |
-| `VITE_SPACE_BASE_PATH` | Space app base path (default `/spaces`) |
-| `VITE_ADMIN_BASE_URL` | Admin app URL |
-| `VITE_ADMIN_BASE_PATH` | Admin base path (default `/god-mode`) |
-| `VITE_LIVE_BASE_URL` | Live server URL |
-| `VITE_LIVE_BASE_PATH` | Live server base path (default `/live`) |
+| Variable               | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `VITE_API_BASE_URL`    | Django API URL (e.g. `http://localhost:8000`) |
+| `VITE_WEB_BASE_URL`    | Main app URL                                  |
+| `VITE_SPACE_BASE_URL`  | Space app URL                                 |
+| `VITE_SPACE_BASE_PATH` | Space app base path (default `/spaces`)       |
+| `VITE_ADMIN_BASE_URL`  | Admin app URL                                 |
+| `VITE_ADMIN_BASE_PATH` | Admin base path (default `/god-mode`)         |
+| `VITE_LIVE_BASE_URL`   | Live server URL                               |
+| `VITE_LIVE_BASE_PATH`  | Live server base path (default `/live`)       |
 
 ### Live server (`.env`)
 
-| Variable | Description |
-|----------|-------------|
-| `API_BASE_URL` | Django API URL for user/document lookups |
-| `LIVE_SERVER_SECRET_KEY` | Secret for JWT signing |
-| `REDIS_URL` or `REDIS_HOST/PORT` | Redis for pub/sub coordination |
-| `CORS_ALLOWED_ORIGINS` | Allowed WebSocket origins |
+| Variable                         | Description                              |
+| -------------------------------- | ---------------------------------------- |
+| `API_BASE_URL`                   | Django API URL for user/document lookups |
+| `LIVE_SERVER_SECRET_KEY`         | Secret for JWT signing                   |
+| `REDIS_URL` or `REDIS_HOST/PORT` | Redis for pub/sub coordination           |
+| `CORS_ALLOWED_ORIGINS`           | Allowed WebSocket origins                |
 
 ### Proxy (environment in docker-compose)
 
-| Variable | Description |
-|----------|-------------|
-| `FILE_SIZE_LIMIT` | Max request body (bytes) |
-| `BUCKET_NAME` | MinIO bucket name for routing |
-| `SITE_ADDRESS` | Domain (for HTTPS cert) |
-| `CERT_EMAIL` | ACME/Let's Encrypt email |
-| `TRUSTED_PROXIES` | Trusted upstream IPs |
-| `LISTEN_HTTP_PORT` | Host port for HTTP (default 80) |
+| Variable            | Description                       |
+| ------------------- | --------------------------------- |
+| `FILE_SIZE_LIMIT`   | Max request body (bytes)          |
+| `BUCKET_NAME`       | MinIO bucket name for routing     |
+| `SITE_ADDRESS`      | Domain (for HTTPS cert)           |
+| `CERT_EMAIL`        | ACME/Let's Encrypt email          |
+| `TRUSTED_PROXIES`   | Trusted upstream IPs              |
+| `LISTEN_HTTP_PORT`  | Host port for HTTP (default 80)   |
 | `LISTEN_HTTPS_PORT` | Host port for HTTPS (default 443) |
 
 ---
 
 ## Volumes
 
-| Volume | Used by | Contains |
-|--------|---------|---------|
-| `pgdata` | plane-db | PostgreSQL data files |
-| `redisdata` | plane-redis | Redis persistence (RDB/AOF) |
-| `uploads` | plane-minio | Uploaded files (avatars, attachments, exports) |
-| `rabbitmq_data` | plane-mq | RabbitMQ queue state |
+| Volume          | Used by     | Contains                                       |
+| --------------- | ----------- | ---------------------------------------------- |
+| `pgdata`        | plane-db    | PostgreSQL data files                          |
+| `redisdata`     | plane-redis | Redis persistence (RDB/AOF)                    |
+| `uploads`       | plane-minio | Uploaded files (avatars, attachments, exports) |
+| `rabbitmq_data` | plane-mq    | RabbitMQ queue state                           |
 
 ---
 
 ## Local Development Workflow
 
 ```bash
-# 1. Start infrastructure
-docker compose -f docker-compose-local.yml up -d
+# 1. Start infrastructure (+ Lonestone MinIO proxy overlay)
+docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml up -d
 
 # 2. Install JS dependencies
 pnpm install
@@ -313,3 +348,5 @@ pnpm check
 ```
 
 For Python/API development, the local compose mounts the `apps/api` directory, so changes are picked up automatically by Gunicorn's auto-reload.
+
+See [Lonestone: MinIO uploads via local proxy overlay](#lonestone-minio-uploads-via-local-proxy-overlay) if file uploads 404 on `/uploads`.

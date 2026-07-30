@@ -1,0 +1,31 @@
+# Lonestone overlay for local development.
+# Keeps upstream docker-compose-local.yml untouched — merge with:
+#
+#   docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml up -d
+#
+# Puts Caddy in front of host :8000 so /uploads → MinIO (same model as production).
+
+services:
+  api:
+    # Drop upstream host port mapping so the proxy owns :8000.
+    ports: !reset []
+    expose:
+      - "8000"
+
+  proxy:
+    image: caddy:2.11.3-alpine
+    restart: unless-stopped
+    networks:
+      - dev_env
+    ports:
+      - "8000:80"
+    volumes:
+      - ./deployments/lonestone/Caddyfile.local:/etc/caddy/Caddyfile:ro
+    environment:
+      FILE_SIZE_LIMIT: ${FILE_SIZE_LIMIT:-5242880}
+      BUCKET_NAME: ${AWS_S3_BUCKET_NAME:-uploads}
+      SITE_ADDRESS: ":80"
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-0.0.0.0/0}
+    depends_on:
+      - api
+      - plane-minio
