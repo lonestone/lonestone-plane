@@ -172,4 +172,9 @@ export class CoreRootStore {
   }
 }
 
+/**
+ * Alias for type imports in core stores.
+ * Runtime app state must use Lonestone `RootStore` from `@/plane-web/store/root.store`
+ * (see `lib/store-context.tsx`).
+ */
 export { CoreRootStore as RootStore };

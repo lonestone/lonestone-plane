@@ -6,6 +6,7 @@
       "@/app/*": ["./app/*"],
       "@/helpers/*": ["./helpers/*"],
       "@/styles/*": ["./styles/*"],
+      "@/plane-web/*": ["./oe/*"],
       "package.json": ["./package.json"]
     },
     "strictNullChecks": true,

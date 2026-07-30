@@ -111,6 +111,8 @@ INSTALLED_APPS = [
     "plane.license",
     "plane.api",
     "plane.authentication",
+    # Lonestone edition (own models/migrations — keep out of plane.db)
+    "plane.lonestone",
     # Third-party things
     "rest_framework",
     "corsheaders",
