@@ -41,7 +41,8 @@ while [ $# -gt 0 ]; do
     --dry-run)   DRY_RUN=1 ;;
     --no-checks) RUN_CHECKS=0 ;;
     --onto)      shift; [ $# -gt 0 ] || die "--onto requires a branch name"; TARGET_BRANCH="$1" ;;
-    -h|--help)   sed -n '2,20p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    # Print the header block, however long it is — no line numbers to drift
+    -h|--help)   awk 'NR>1 && /^#/ {sub(/^# ?/,""); print; next} NR>1 {exit}' "$0"; exit 0 ;;
     *)           die "unknown option: $1" ;;
   esac
   shift
