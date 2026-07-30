@@ -24,6 +24,7 @@ export interface IProjectTemplateStore {
     data: TProjectTemplateUpdatePayload
   ) => Promise<TProjectTemplate>;
   deleteTemplate: (workspaceSlug: string, templateId: string) => Promise<void>;
+  applyTemplate: (workspaceSlug: string, templateId: string, projectId: string) => Promise<{ project_id: string }>;
 }
 
 export class ProjectTemplateStore implements IProjectTemplateStore {
@@ -41,6 +42,7 @@ export class ProjectTemplateStore implements IProjectTemplateStore {
       createTemplate: action,
       updateTemplate: action,
       deleteTemplate: action,
+      applyTemplate: action,
     });
     this.rootStore = _rootStore;
   }
@@ -100,4 +102,7 @@ export class ProjectTemplateStore implements IProjectTemplateStore {
       delete this.templatesMap[templateId];
     });
   };
+
+  applyTemplate = async (workspaceSlug: string, templateId: string, projectId: string) =>
+    projectTemplateService.apply(workspaceSlug, templateId, projectId);
 }

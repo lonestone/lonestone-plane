@@ -59,6 +59,16 @@ export class ProjectTemplateService extends APIService {
         throw error?.response?.data;
       });
   }
+
+  async apply(workspaceSlug: string, templateId: string, projectId: string): Promise<{ project_id: string }> {
+    return this.post(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/${templateId}/apply/`, {
+      project_id: projectId,
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
+  }
 }
 
 export const projectTemplateService = new ProjectTemplateService();

@@ -132,7 +132,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
               placeholder={t("templates.form.project.template.description.placeholder")}
               className="min-h-20 w-full"
             />
-            <Button variant="primary" size="md" onClick={handleCreate} disabled={isSubmitting}>
+            <Button variant="primary" size="sm" onClick={handleCreate} disabled={isSubmitting}>
               {t("templates.form.project.button.create")}
             </Button>
           </div>

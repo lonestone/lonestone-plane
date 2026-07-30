@@ -2,6 +2,6 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-from .project_template import ProjectTemplateEndpoint
+from .project_template import ProjectTemplateApplyEndpoint, ProjectTemplateEndpoint
 
-__all__ = ("ProjectTemplateEndpoint",)
+__all__ = ("ProjectTemplateEndpoint", "ProjectTemplateApplyEndpoint")

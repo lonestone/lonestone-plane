@@ -9,13 +9,14 @@ from rest_framework.response import Response
 
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
-from plane.db.models import Workspace
+from plane.db.models import Project, Workspace
 from plane.lonestone.models import ProjectTemplate, Template
 from plane.lonestone.serializers import (
     ProjectTemplateDataSerializer,
     ProjectTemplateSerializer,
     TemplateSerializer,
 )
+from plane.lonestone.services import apply_project_template
 
 
 class ProjectTemplateEndpoint(BaseAPIView):
@@ -130,3 +131,35 @@ class ProjectTemplateEndpoint(BaseAPIView):
 
         template.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class ProjectTemplateApplyEndpoint(BaseAPIView):
+    """Apply a project template snapshot to an existing project."""
+
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], level="WORKSPACE")
+    def post(self, request, slug, pk):
+        project_id = request.data.get("project_id")
+        if not project_id:
+            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        template = Template.objects.filter(
+            workspace__slug=slug,
+            template_type=Template.TemplateType.PROJECT,
+            pk=pk,
+        ).first()
+        if template is None:
+            return Response({"error": "Template not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not Project.objects.filter(id=project_id, workspace__slug=slug).exists():
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        try:
+            apply_project_template(
+                template_id=str(pk),
+                project_id=str(project_id),
+                user_id=str(request.user.id) if request.user else None,
+            )
+        except ProjectTemplate.DoesNotExist:
+            return Response({"error": "Project template snapshot not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({"project_id": str(project_id)}, status=status.HTTP_200_OK)

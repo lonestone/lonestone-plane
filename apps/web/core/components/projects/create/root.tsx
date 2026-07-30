@@ -4,13 +4,14 @@
  * See the LICENSE file for details.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { FormProvider, useForm } from "react-hook-form";
 // plane imports
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import { EFileAssetType } from "@plane/types";
+import type { TProject } from "@plane/types";
 // components
 import ProjectCommonAttributes from "@/components/project/create/common-attributes";
 import ProjectCreateHeader from "@/components/project/create/header";
@@ -19,8 +20,7 @@ import ProjectCreateButtons from "@/components/project/create/project-create-but
 import { getCoverImageType, uploadCoverImage } from "@/helpers/cover-image.helper";
 import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
-// plane web types
-import type { TProject } from "@plane/types";
+import { useProjectTemplates } from "@/plane-web/hooks/store/use-project-templates";
 import { ProjectAttributes } from "./attributes";
 import { getProjectFormValues } from "./utils";
 
@@ -35,12 +35,14 @@ export type TCreateProjectFormProps = {
 };
 
 export const CreateProjectForm = observer(function CreateProjectForm(props: TCreateProjectFormProps) {
-  const { setToFavorite, workspaceSlug, data, onClose, handleNextStep, updateCoverImageStatus } = props;
+  const { setToFavorite, workspaceSlug, data, onClose, handleNextStep, updateCoverImageStatus, templateId } = props;
   // store
   const { t } = useTranslation();
   const { addProjectToFavorites, createProject, updateProject } = useProject();
+  const { fetchTemplateById, getTemplateById, applyTemplate } = useProjectTemplates();
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(templateId ?? null);
   // form info
   const methods = useForm<TProject>({
     defaultValues: { ...getProjectFormValues(), ...data },
@@ -48,6 +50,44 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   });
   const { handleSubmit, reset, setValue } = methods;
   const { isMobile } = usePlatformOS();
+
+  const applySnapshotToForm = (
+    snapshot:
+      | { name?: string; description?: string; network?: number; logo_props?: unknown; cover_image?: string }
+      | undefined
+  ) => {
+    if (!snapshot) return;
+    if (snapshot.name) setValue("name", snapshot.name, { shouldDirty: true });
+    if (snapshot.description !== undefined) setValue("description", snapshot.description, { shouldDirty: true });
+    if (snapshot.network !== undefined) setValue("network", snapshot.network, { shouldDirty: true });
+    if (snapshot.logo_props)
+      setValue("logo_props", snapshot.logo_props as TProject["logo_props"], { shouldDirty: true });
+    if (snapshot.cover_image) setValue("cover_image_url", snapshot.cover_image, { shouldDirty: true });
+  };
+
+  useEffect(() => {
+    if (!templateId) return;
+    void fetchTemplateById(workspaceSlug, templateId).then((template) => {
+      applySnapshotToForm(template.template_data?.[0]);
+      return undefined;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once for initial templateId
+  }, [templateId, workspaceSlug]);
+
+  const handleTemplateSelect = (nextTemplateId: string | null) => {
+    setSelectedTemplateId(nextTemplateId);
+    if (!nextTemplateId) return;
+    const cached = getTemplateById(nextTemplateId);
+    if (cached) {
+      applySnapshotToForm(cached.template_data?.[0]);
+      return;
+    }
+    void fetchTemplateById(workspaceSlug, nextTemplateId).then((template) => {
+      applySnapshotToForm(template.template_data?.[0]);
+      return undefined;
+    });
+  };
+
   const handleAddToFavorites = (projectId: string) => {
     if (!workspaceSlug) return;
 
@@ -101,6 +141,15 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
           await updateCoverImageStatus(res.id, coverImage);
           await updateProject(workspaceSlug.toString(), res.id, { cover_image_url: coverImage });
         }
+
+        if (selectedTemplateId) {
+          try {
+            await applyTemplate(workspaceSlug.toString(), selectedTemplateId, res.id);
+          } catch (error) {
+            console.error("Failed to apply project template:", error);
+          }
+        }
+
         setToast({
           type: TOAST_TYPE.SUCCESS,
           title: t("success"),
@@ -167,6 +216,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const handleClose = () => {
     onClose();
     setShouldAutoSyncIdentifier(true);
+    setSelectedTemplateId(null);
     setTimeout(() => {
       reset();
     }, 300);
@@ -174,7 +224,12 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
 
   return (
     <FormProvider {...methods}>
-      <ProjectCreateHeader handleClose={handleClose} isMobile={isMobile} />
+      <ProjectCreateHeader
+        handleClose={handleClose}
+        isMobile={isMobile}
+        onTemplateSelect={handleTemplateSelect}
+        selectedTemplateId={selectedTemplateId}
+      />
 
       <form onSubmit={handleSubmit(onSubmit)} className="px-3">
         <div className="mt-9 space-y-6 pb-5">

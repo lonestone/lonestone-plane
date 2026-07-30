@@ -6,7 +6,7 @@
 
 from django.urls import path
 
-from plane.lonestone.views import ProjectTemplateEndpoint
+from plane.lonestone.views import ProjectTemplateApplyEndpoint, ProjectTemplateEndpoint
 
 urlpatterns = [
     path(
@@ -18,5 +18,10 @@ urlpatterns = [
         "workspaces/<str:slug>/project-templates/<uuid:pk>/",
         ProjectTemplateEndpoint.as_view(),
         name="lonestone-project-template-detail",
+    ),
+    path(
+        "workspaces/<str:slug>/project-templates/<uuid:pk>/apply/",
+        ProjectTemplateApplyEndpoint.as_view(),
+        name="lonestone-project-template-apply",
     ),
 ]
