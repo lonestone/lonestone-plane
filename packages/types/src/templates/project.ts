@@ -64,6 +64,8 @@ export type TProjectTemplateCreatePayload = {
   description?: string;
   description_html?: string;
   cover_image?: string;
+  /** When set, server snapshots this project's states/labels/features/work items. */
+  project_id?: string;
   template_data?: Partial<TProjectTemplateSnapshot>;
 };
 

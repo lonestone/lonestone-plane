@@ -16,7 +16,7 @@ from plane.lonestone.serializers import (
     ProjectTemplateSerializer,
     TemplateSerializer,
 )
-from plane.lonestone.services import apply_project_template
+from plane.lonestone.services import apply_project_template, build_project_template_snapshot
 
 
 class ProjectTemplateEndpoint(BaseAPIView):
@@ -54,15 +54,37 @@ class ProjectTemplateEndpoint(BaseAPIView):
     @allow_permission([ROLE.ADMIN], level="WORKSPACE")
     def post(self, request, slug):
         workspace = Workspace.objects.get(slug=slug)
-        template_data = request.data.get("template_data") or {}
+        template_data = dict(request.data.get("template_data") or {})
+        project_id = request.data.get("project_id")
+
+        if project_id:
+            project = (
+                Project.objects.filter(id=project_id, workspace=workspace)
+                .select_related("cover_image_asset")
+                .first()
+            )
+            if project is None:
+                return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            # Snapshot is the base. Drop empty list/dict overrides so clients cannot
+            # accidentally wipe states/labels/work_items when also sending project_id.
+            overrides = {
+                key: value
+                for key, value in template_data.items()
+                if value not in (None, "", [], {})
+            }
+            template_data = {**build_project_template_snapshot(project), **overrides}
+
+        name = (request.data.get("name") or template_data.get("name") or "").strip()
+        if not name:
+            return Response({"name": ["This field is required."]}, status=status.HTTP_400_BAD_REQUEST)
 
         with transaction.atomic():
             template = Template.objects.create(
                 workspace=workspace,
-                name=request.data.get("name", ""),
-                description=request.data.get("description", ""),
+                name=name,
+                description=request.data.get("description") or template_data.get("description") or "",
                 description_html=request.data.get("description_html", "<p></p>"),
-                cover_image=request.data.get("cover_image", ""),
+                cover_image=request.data.get("cover_image") or template_data.get("cover_image") or "",
                 template_type=Template.TemplateType.PROJECT,
             )
 
@@ -70,7 +92,7 @@ class ProjectTemplateEndpoint(BaseAPIView):
                 **template_data,
                 "template": str(template.id),
                 "workspace": str(workspace.id),
-                "name": template_data.get("name") or request.data.get("name", ""),
+                "name": template_data.get("name") or template.name,
             }
             serializer = ProjectTemplateSerializer(data=payload)
             if not serializer.is_valid():

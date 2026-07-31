@@ -3,5 +3,6 @@
 # See the LICENSE file for details.
 
 from .apply_project_template import apply_project_template
+from .snapshot_project_template import build_project_template_snapshot
 
-__all__ = ("apply_project_template",)
+__all__ = ("apply_project_template", "build_project_template_snapshot")
