@@ -11,17 +11,16 @@ import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
+import { EmptyStateCompact } from "@plane/propel/empty-state";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { Input, TextArea } from "@plane/ui";
 import type { TProjectTemplate } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
-import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
-import { useProject } from "@/hooks/store/use-project";
 import { useWorkspace } from "@/hooks/store/use-workspace";
 import { useUserPermissions } from "@/hooks/store/user";
+import { CreateProjectTemplateModal } from "@/plane-web/components/templates/create-project-template-modal";
 import { useProjectTemplates } from "@/plane-web/hooks/store/use-project-templates";
 
 type Props = {
@@ -33,14 +32,9 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   const { workspaceSlug, header } = props;
   const { t } = useTranslation();
   const { currentWorkspace } = useWorkspace();
-  const { getProjectById } = useProject();
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
-  const { templates, loader, fetchTemplates, createTemplate, deleteTemplate } = useProjectTemplates();
-
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [sourceProjectId, setSourceProjectId] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const { templates, loader, fetchTemplates, deleteTemplate } = useProjectTemplates();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   const canManage = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -53,65 +47,6 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace.name} - ${t("workspace_settings.settings.templates.title")}`
     : undefined;
-
-  const handleSourceProjectChange = (projectId: string) => {
-    setSourceProjectId(projectId);
-    const project = getProjectById(projectId);
-    if (!name.trim() && project?.name) {
-      setName(project.name);
-    }
-    if (!description.trim() && project?.description) {
-      setDescription(project.description);
-    }
-  };
-
-  const handleCreate = async () => {
-    if (!name.trim()) {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("templates.settings.form.project.template.name.validation.required"),
-      });
-      return;
-    }
-    setIsSubmitting(true);
-    try {
-      await createTemplate(workspaceSlug, {
-        name: name.trim(),
-        description: description.trim(),
-        project_id: sourceProjectId ?? undefined,
-        template_data: sourceProjectId
-          ? {
-              name: name.trim(),
-              description: description.trim(),
-            }
-          : {
-              name: name.trim(),
-              description: description.trim(),
-              network: 2,
-              states: [],
-              labels: [],
-              work_items: [],
-            },
-      });
-      setName("");
-      setDescription("");
-      setSourceProjectId(null);
-      setToast({
-        type: TOAST_TYPE.SUCCESS,
-        title: t("success"),
-        message: t("templates.settings.create_template.label"),
-      });
-    } catch {
-      setToast({
-        type: TOAST_TYPE.ERROR,
-        title: t("error"),
-        message: t("something_went_wrong_please_try_again"),
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
 
   const handleDelete = async (template: TProjectTemplate) => {
     try {
@@ -133,52 +68,46 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   return (
     <SettingsContentWrapper header={header}>
       <PageHead title={pageTitle} />
+      <CreateProjectTemplateModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        workspaceSlug={workspaceSlug}
+      />
       <div className="w-full space-y-6">
         <SettingsHeading
           title={t("workspace_settings.settings.templates.title")}
           description={t("workspace_settings.settings.templates.description")}
+          control={
+            canCreate ? (
+              <Button variant="primary" size="lg" onClick={() => setIsCreateModalOpen(true)}>
+                {t("templates.settings.create_template.label")}
+              </Button>
+            ) : undefined
+          }
         />
-
-        {canCreate && (
-          <div className="space-y-3 rounded-lg border border-subtle p-4">
-            <h3 className="text-sm font-medium text-primary">{t("templates.settings.new_project_template")}</h3>
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-secondary">
-                {t("templates.settings.form.project.source_project.label")}
-              </p>
-              <ProjectDropdown
-                value={sourceProjectId}
-                onChange={handleSourceProjectChange}
-                multiple={false}
-                buttonVariant="border-with-text"
-                placeholder={t("templates.settings.form.project.source_project.placeholder")}
-              />
-              <p className="text-xs text-tertiary">{t("templates.settings.form.project.source_project.helper")}</p>
-            </div>
-            <Input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder={t("templates.settings.form.project.template.name.placeholder")}
-              className="w-full"
-            />
-            <TextArea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("templates.settings.form.project.template.description.placeholder")}
-              className="min-h-20 w-full"
-            />
-            <Button variant="primary" size="sm" onClick={handleCreate} disabled={isSubmitting}>
-              {t("templates.settings.form.project.button.create")}
-            </Button>
-          </div>
-        )}
 
         <div className="space-y-2">
           <h3 className="text-sm font-medium text-primary">{t("templates.settings.options.project.label")}</h3>
           {loader && templates.length === 0 ? (
             <p className="text-sm text-tertiary">{t("loading")}</p>
           ) : templates.length === 0 ? (
-            <p className="text-sm text-tertiary">{t("templates.settings.description")}</p>
+            <EmptyStateCompact
+              assetKey="template"
+              title={t("settings_empty_state.template_setting.title")}
+              description={t("settings_empty_state.template_setting.description")}
+              actions={
+                canCreate
+                  ? [
+                      {
+                        label: t("settings_empty_state.template_setting.cta_primary"),
+                        onClick: () => setIsCreateModalOpen(true),
+                      },
+                    ]
+                  : undefined
+              }
+              align="start"
+              rootClassName="py-20"
+            />
           ) : (
             <ul className="divide-y divide-subtle rounded-lg border border-subtle">
               {templates.map((template) => (
