@@ -7,6 +7,26 @@
 export type TLonestoneTemplateType = "project" | "workitem" | "page";
 
 /** Snapshot applied when creating a project from a Lonestone template. */
+export type TProjectTemplateState = {
+  name: string;
+  color?: string;
+  group?: string;
+  sequence?: number;
+  default?: boolean;
+};
+
+export type TProjectTemplateLabel = {
+  name: string;
+  color?: string;
+  description?: string;
+  sort_order?: number;
+};
+
+export type TProjectTemplateWorkItem = {
+  name: string;
+  description_html?: string;
+};
+
 export type TProjectTemplateSnapshot = {
   id?: string;
   template?: string;
@@ -31,13 +51,13 @@ export type TProjectTemplateSnapshot = {
   timezone?: string;
   archive_in?: number;
   close_in?: number;
-  states?: unknown[];
-  labels?: unknown[];
+  states?: TProjectTemplateState[];
+  labels?: TProjectTemplateLabel[];
   estimates?: Record<string, unknown>;
   workitem_types?: unknown[];
   members?: unknown[];
   intake_settings?: Record<string, unknown>;
-  work_items?: unknown[];
+  work_items?: TProjectTemplateWorkItem[];
   start_date?: string | null;
   target_date?: string | null;
 };

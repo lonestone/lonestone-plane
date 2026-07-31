@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { observer } from "mobx-react";
-import { Trash2 } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
@@ -35,6 +35,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   const { workspaceUserInfo, allowPermissions } = useUserPermissions();
   const { templates, loader, fetchTemplates, deleteTemplate } = useProjectTemplates();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<TProjectTemplate | null>(null);
 
   const canManage = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -47,6 +48,11 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace.name} - ${t("workspace_settings.settings.templates.title")}`
     : undefined;
+
+  const handleCloseModal = () => {
+    setIsCreateModalOpen(false);
+    setEditingTemplate(null);
+  };
 
   const handleDelete = async (template: TProjectTemplate) => {
     try {
@@ -69,9 +75,10 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
     <SettingsContentWrapper header={header}>
       <PageHead title={pageTitle} />
       <CreateProjectTemplateModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
+        isOpen={isCreateModalOpen || Boolean(editingTemplate)}
+        onClose={handleCloseModal}
         workspaceSlug={workspaceSlug}
+        template={editingTemplate}
       />
       <div className="w-full space-y-6">
         <SettingsHeading
@@ -110,26 +117,53 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
             />
           ) : (
             <ul className="divide-y divide-subtle rounded-lg border border-subtle">
-              {templates.map((template) => (
-                <li key={template.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <p className="text-sm truncate font-medium text-primary">{template.name}</p>
-                    {template.description ? (
-                      <p className="text-xs truncate text-tertiary">{template.description}</p>
-                    ) : null}
-                  </div>
-                  {canCreate && (
+              {templates.map((template) => {
+                const snapshot = template.template_data?.[0];
+                const summaryParts = [
+                  snapshot?.states?.length ? `${snapshot.states.length} states` : null,
+                  snapshot?.labels?.length ? `${snapshot.labels.length} labels` : null,
+                  snapshot?.work_items?.length ? `${snapshot.work_items.length} work items` : null,
+                ].filter(Boolean);
+
+                return (
+                  <li key={template.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <button
                       type="button"
-                      className="hover:text-danger rounded p-2 text-tertiary hover:bg-layer-1"
-                      onClick={() => handleDelete(template)}
-                      aria-label={t("delete")}
+                      className="min-w-0 flex-1 text-left"
+                      onClick={() => canCreate && setEditingTemplate(template)}
+                      disabled={!canCreate}
                     >
-                      <Trash2 className="size-4" />
+                      <p className="text-sm truncate font-medium text-primary">{template.name}</p>
+                      {template.description ? (
+                        <p className="text-xs truncate text-tertiary">{template.description}</p>
+                      ) : null}
+                      {summaryParts.length > 0 ? (
+                        <p className="text-xs mt-0.5 text-tertiary">{summaryParts.join(" · ")}</p>
+                      ) : null}
                     </button>
-                  )}
-                </li>
-              ))}
+                    {canCreate && (
+                      <div className="flex shrink-0 items-center gap-1">
+                        <button
+                          type="button"
+                          className="rounded p-2 text-tertiary hover:bg-layer-1 hover:text-primary"
+                          onClick={() => setEditingTemplate(template)}
+                          aria-label={t("edit")}
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className="hover:text-danger rounded p-2 text-tertiary hover:bg-layer-1"
+                          onClick={() => handleDelete(template)}
+                          aria-label={t("delete")}
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </div>

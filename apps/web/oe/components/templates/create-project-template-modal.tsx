@@ -5,6 +5,7 @@
  */
 
 import { observer } from "mobx-react";
+import type { TProjectTemplate } from "@plane/types";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import useKeypress from "@/hooks/use-keypress";
 import { CreateProjectTemplateForm } from "./create-project-template-form";
@@ -14,10 +15,11 @@ type Props = {
   onClose: () => void;
   workspaceSlug: string;
   onSuccess?: () => void;
+  template?: TProjectTemplate | null;
 };
 
 export const CreateProjectTemplateModal = observer(function CreateProjectTemplateModal(props: Props) {
-  const { isOpen, onClose, workspaceSlug, onSuccess } = props;
+  const { isOpen, onClose, workspaceSlug, onSuccess, template = null } = props;
 
   useKeypress("Escape", () => {
     if (isOpen) onClose();
@@ -25,7 +27,14 @@ export const CreateProjectTemplateModal = observer(function CreateProjectTemplat
 
   return (
     <ModalCore isOpen={isOpen} position={EModalPosition.TOP} width={EModalWidth.XXXXL}>
-      {isOpen && <CreateProjectTemplateForm workspaceSlug={workspaceSlug} onClose={onClose} onSuccess={onSuccess} />}
+      {isOpen && (
+        <CreateProjectTemplateForm
+          workspaceSlug={workspaceSlug}
+          onClose={onClose}
+          onSuccess={onSuccess}
+          template={template}
+        />
+      )}
     </ModalCore>
   );
 });
