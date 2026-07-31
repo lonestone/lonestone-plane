@@ -16,6 +16,7 @@ import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { TProjectTemplate } from "@plane/types";
 import { NotAuthorizedView } from "@/components/auth-screens/not-authorized-view";
 import { PageHead } from "@/components/core/page-title";
+import { CreateProjectModal } from "@/components/project/create-project-modal";
 import { SettingsContentWrapper } from "@/components/settings/content-wrapper";
 import { SettingsHeading } from "@/components/settings/heading";
 import { useWorkspace } from "@/hooks/store/use-workspace";
@@ -36,6 +37,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   const { templates, loader, fetchTemplates, deleteTemplate } = useProjectTemplates();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [editingTemplate, setEditingTemplate] = useState<TProjectTemplate | null>(null);
+  const [useTemplateId, setUseTemplateId] = useState<string | null>(null);
 
   const canManage = allowPermissions(
     [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
@@ -80,6 +82,14 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
         workspaceSlug={workspaceSlug}
         template={editingTemplate}
       />
+      {useTemplateId ? (
+        <CreateProjectModal
+          isOpen
+          onClose={() => setUseTemplateId(null)}
+          workspaceSlug={workspaceSlug}
+          templateId={useTemplateId}
+        />
+      ) : null}
       <div className="w-full space-y-6">
         <SettingsHeading
           title={t("workspace_settings.settings.templates.title")}
@@ -127,12 +137,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
 
                 return (
                   <li key={template.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <button
-                      type="button"
-                      className="min-w-0 flex-1 text-left"
-                      onClick={() => canCreate && setEditingTemplate(template)}
-                      disabled={!canCreate}
-                    >
+                    <div className="min-w-0 flex-1">
                       <p className="text-sm truncate font-medium text-primary">{template.name}</p>
                       {template.description ? (
                         <p className="text-xs truncate text-tertiary">{template.description}</p>
@@ -140,27 +145,32 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
                       {summaryParts.length > 0 ? (
                         <p className="text-xs mt-0.5 text-tertiary">{summaryParts.join(" · ")}</p>
                       ) : null}
-                    </button>
-                    {canCreate && (
-                      <div className="flex shrink-0 items-center gap-1">
-                        <button
-                          type="button"
-                          className="rounded p-2 text-tertiary hover:bg-layer-1 hover:text-primary"
-                          onClick={() => setEditingTemplate(template)}
-                          aria-label={t("edit")}
-                        >
-                          <Pencil className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className="hover:text-danger rounded p-2 text-tertiary hover:bg-layer-1"
-                          onClick={() => handleDelete(template)}
-                          aria-label={t("delete")}
-                        >
-                          <Trash2 className="size-4" />
-                        </button>
-                      </div>
-                    )}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button variant="secondary" size="sm" onClick={() => setUseTemplateId(template.id)}>
+                        {t("templates.settings.use_template.button.default")}
+                      </Button>
+                      {canCreate && (
+                        <>
+                          <button
+                            type="button"
+                            className="rounded p-2 text-tertiary hover:bg-layer-1 hover:text-primary"
+                            onClick={() => setEditingTemplate(template)}
+                            aria-label={t("edit")}
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            className="hover:text-danger rounded p-2 text-tertiary hover:bg-layer-1"
+                            onClick={() => handleDelete(template)}
+                            aria-label={t("delete")}
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </li>
                 );
               })}
