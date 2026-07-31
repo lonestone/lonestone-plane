@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { observer } from "mobx-react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { ETabIndices } from "@plane/constants";
@@ -18,8 +18,8 @@ import type {
   TProjectTemplateState,
   TProjectTemplateWorkItem,
 } from "@plane/types";
+import { Input, TextArea } from "@plane/ui";
 import { getTabIndex } from "@plane/utils";
-import ProjectCommonAttributes from "@/components/project/create/common-attributes";
 import ProjectCreateHeader from "@/components/project/create/header";
 import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { ProjectAttributes } from "@/components/projects/create/attributes";
@@ -47,6 +47,8 @@ const FEATURE_DEFAULTS = {
 const getDefaultFormValues = (): TCreateProjectTemplateFormValues => ({
   ...getProjectFormValues(),
   ...FEATURE_DEFAULTS,
+  // Identifier is a create-project field, not part of templates (Plane docs).
+  identifier: "TMPL",
   project_id: null,
   states: [],
   labels: [],
@@ -77,7 +79,6 @@ const getFormValuesFromTemplate = (template: TProjectTemplate): TCreateProjectTe
     labels: snapshot?.labels ?? [],
     work_items: snapshot?.work_items ?? [],
     project_id: null,
-    identifier: "",
   };
 };
 
@@ -120,7 +121,6 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
   const { isMobile } = usePlatformOS();
   const { getProjectById } = useProject();
   const { createTemplate, updateTemplate } = useProjectTemplates();
-  const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(!template);
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   const isEditMode = Boolean(template);
 
@@ -133,17 +133,15 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
     handleSubmit,
     reset,
     setValue,
-    formState: { isSubmitting },
+    formState: { errors, isSubmitting },
   } = methods;
 
   useEffect(() => {
     reset(template ? getFormValuesFromTemplate(template) : getDefaultFormValues());
-    setShouldAutoSyncIdentifier(!template);
   }, [template, reset]);
 
   const handleClose = () => {
     onClose();
-    setShouldAutoSyncIdentifier(true);
     setTimeout(() => {
       reset(getDefaultFormValues());
     }, 300);
@@ -156,10 +154,6 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
 
     if (project.name) setValue("name", project.name, { shouldDirty: true });
     if (project.description !== undefined) setValue("description", project.description, { shouldDirty: true });
-    if (project.identifier) {
-      setValue("identifier", project.identifier, { shouldDirty: true });
-      setShouldAutoSyncIdentifier(false);
-    }
     if (project.network !== undefined) setValue("network", project.network, { shouldDirty: true });
     if (project.logo_props) setValue("logo_props", project.logo_props, { shouldDirty: true });
     if (project.cover_image_url) setValue("cover_image_url", project.cover_image_url, { shouldDirty: true });
@@ -203,8 +197,6 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
           project_id: projectId,
           template_data: projectId
             ? {
-                // Prefer form values when set; empty lists are stripped server-side so
-                // the project snapshot still fills states/labels/work items.
                 ...templateData,
                 states: templateData.states.length ? templateData.states : undefined,
                 labels: templateData.labels.length ? templateData.labels : undefined,
@@ -260,12 +252,52 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
             </div>
           )}
 
-          <ProjectCommonAttributes
-            setValue={setValue as never}
-            isMobile={isMobile}
-            shouldAutoSyncIdentifier={shouldAutoSyncIdentifier}
-            setShouldAutoSyncIdentifier={setShouldAutoSyncIdentifier}
-          />
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Controller
+                control={control}
+                name="name"
+                rules={{
+                  required: t("templates.settings.form.project.template.name.validation.required"),
+                  maxLength: {
+                    value: 255,
+                    message: t("templates.settings.form.project.template.name.validation.maxLength"),
+                  },
+                }}
+                render={({ field: { value, onChange } }) => (
+                  <Input
+                    id="name"
+                    name="name"
+                    type="text"
+                    value={value}
+                    onChange={onChange}
+                    hasError={Boolean(errors.name)}
+                    placeholder={t("templates.settings.form.project.template.name.placeholder")}
+                    className="w-full"
+                    tabIndex={getIndex("name")}
+                  />
+                )}
+              />
+              {errors.name?.message ? <span className="text-11 text-danger-primary">{errors.name.message}</span> : null}
+            </div>
+            <Controller
+              name="description"
+              control={control}
+              render={({ field: { value, onChange } }) => (
+                <TextArea
+                  id="description"
+                  name="description"
+                  value={value}
+                  placeholder={t("templates.settings.form.project.template.description.placeholder")}
+                  onChange={onChange}
+                  className="!h-24 w-full text-13"
+                  hasError={Boolean(errors.description)}
+                  tabIndex={getIndex("description")}
+                />
+              )}
+            />
+          </div>
+
           <ProjectAttributes isMobile={isMobile} />
           <ProjectTemplateSnapshotFields />
         </div>

@@ -154,7 +154,6 @@ export function ProjectTemplateSnapshotFields() {
             <Controller
               control={control}
               name={`states.${index}.name`}
-              rules={{ required: true }}
               render={({ field: { value, onChange } }) => (
                 <Input value={value} onChange={onChange} placeholder={t("name")} className="min-w-40 flex-1" />
               )}
@@ -214,7 +213,6 @@ export function ProjectTemplateSnapshotFields() {
             <Controller
               control={control}
               name={`labels.${index}.name`}
-              rules={{ required: true }}
               render={({ field: { value, onChange } }) => (
                 <Input value={value} onChange={onChange} placeholder={t("name")} className="min-w-40 flex-1" />
               )}
@@ -243,7 +241,6 @@ export function ProjectTemplateSnapshotFields() {
             <Controller
               control={control}
               name={`work_items.${index}.name`}
-              rules={{ required: true }}
               render={({ field: { value, onChange } }) => (
                 <Input value={value} onChange={onChange} placeholder={t("title")} className="min-w-40 flex-1" />
               )}
