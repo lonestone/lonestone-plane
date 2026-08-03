@@ -6,13 +6,13 @@
 
 import { Controller, useFieldArray, useFormContext } from "react-hook-form";
 import { Plus, Trash2 } from "lucide-react";
-import { STATE_GROUPS } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { CycleIcon, IntakeIcon, ModuleIcon, PageIcon, ViewsIcon } from "@plane/propel/icons";
 import { Button } from "@plane/propel/button";
-import { CustomSelect, Input, ToggleSwitch } from "@plane/ui";
+import { Input, ToggleSwitch } from "@plane/ui";
 import { SettingsBoxedControlItem } from "@/components/settings/boxed-control-item";
 import type { TCreateProjectTemplateFormValues } from "./create-project-template-form";
+import { ProjectTemplateStatesEditor } from "./project-template-states-editor";
 
 const FEATURE_FIELDS = [
   {
@@ -52,11 +52,6 @@ const FEATURE_FIELDS = [
   },
 ];
 
-const STATE_GROUP_OPTIONS = Object.values(STATE_GROUPS).map((group) => ({
-  value: group.key,
-  label: group.label,
-}));
-
 function SnapshotListSection(props: {
   title: string;
   emptyDescription: string;
@@ -88,7 +83,6 @@ export function ProjectTemplateSnapshotFields() {
   const { t } = useTranslation();
   const { control } = useFormContext<TCreateProjectTemplateFormValues>();
 
-  const states = useFieldArray({ control, name: "states" });
   const labels = useFieldArray({ control, name: "labels" });
   const workItems = useFieldArray({ control, name: "work_items" });
 
@@ -121,72 +115,7 @@ export function ProjectTemplateSnapshotFields() {
         </div>
       </div>
 
-      <SnapshotListSection
-        title={t("common.states")}
-        emptyDescription={t("settings_empty_state.workflows.states.description")}
-        addLabel={t("common.add")}
-        isEmpty={states.fields.length === 0}
-        onAdd={() =>
-          states.append({
-            name: "",
-            color: STATE_GROUPS.unstarted.color,
-            group: STATE_GROUPS.unstarted.key,
-            sequence: 15000,
-            default: states.fields.length === 0,
-          })
-        }
-      >
-        {states.fields.map((field, index) => (
-          <div key={field.id} className="flex flex-wrap items-center gap-2 rounded-md border border-subtle p-2">
-            <Controller
-              control={control}
-              name={`states.${index}.color`}
-              render={({ field: { value, onChange } }) => (
-                <input
-                  type="color"
-                  value={value || "#3f76ff"}
-                  onChange={(e) => onChange(e.target.value)}
-                  className="size-7 cursor-pointer rounded border border-subtle bg-transparent"
-                  aria-label="State color"
-                />
-              )}
-            />
-            <Controller
-              control={control}
-              name={`states.${index}.name`}
-              render={({ field: { value, onChange } }) => (
-                <Input value={value} onChange={onChange} placeholder={t("name")} className="min-w-40 flex-1" />
-              )}
-            />
-            <Controller
-              control={control}
-              name={`states.${index}.group`}
-              render={({ field: { value, onChange } }) => (
-                <CustomSelect
-                  value={value}
-                  onChange={onChange}
-                  label={STATE_GROUP_OPTIONS.find((option) => option.value === value)?.label || t("select")}
-                  buttonClassName="h-8"
-                >
-                  {STATE_GROUP_OPTIONS.map((option) => (
-                    <CustomSelect.Option key={option.value} value={option.value}>
-                      {option.label}
-                    </CustomSelect.Option>
-                  ))}
-                </CustomSelect>
-              )}
-            />
-            <button
-              type="button"
-              className="hover:text-danger rounded p-2 text-tertiary hover:bg-layer-1"
-              onClick={() => states.remove(index)}
-              aria-label={t("delete")}
-            >
-              <Trash2 className="size-4" />
-            </button>
-          </div>
-        ))}
-      </SnapshotListSection>
+      <ProjectTemplateStatesEditor />
 
       <SnapshotListSection
         title={t("common.labels")}

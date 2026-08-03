@@ -8,11 +8,13 @@ export type TLonestoneTemplateType = "project" | "workitem" | "page";
 
 /** Snapshot applied when creating a project from a Lonestone template. */
 export type TProjectTemplateState = {
+  id?: string;
   name: string;
   color?: string;
   group?: string;
   sequence?: number;
   default?: boolean;
+  description?: string;
 };
 
 export type TProjectTemplateLabel = {

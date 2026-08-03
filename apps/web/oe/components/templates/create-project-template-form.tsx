@@ -225,7 +225,13 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
     <FormProvider {...methods}>
       <ProjectCreateHeader handleClose={handleClose} isMobile={isMobile} showActionButtons={false} />
 
-      <form onSubmit={handleSubmit(onSubmit)} className="px-3">
+      <form
+        onSubmit={(e) => {
+          // Nested state editors use native <button>s that would otherwise submit this form.
+          e.preventDefault();
+        }}
+        className="px-3"
+      >
         <div className="mt-9 space-y-6 pb-5">
           {!isEditMode && (
             <div className="space-y-1.5">
@@ -306,7 +312,14 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
           <Button variant="secondary" size="lg" onClick={handleClose} tabIndex={getIndex("cancel")}>
             {t("common.cancel")}
           </Button>
-          <Button variant="primary" size="lg" type="submit" loading={isSubmitting} tabIndex={getIndex("submit")}>
+          <Button
+            variant="primary"
+            size="lg"
+            type="button"
+            loading={isSubmitting}
+            tabIndex={getIndex("submit")}
+            onClick={handleSubmit(onSubmit)}
+          >
             {isEditMode
               ? t("templates.settings.form.project.button.update")
               : t("templates.settings.form.project.button.create")}
