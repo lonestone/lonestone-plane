@@ -38,7 +38,7 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
   const { setToFavorite, workspaceSlug, data, onClose, handleNextStep, updateCoverImageStatus, templateId } = props;
   // store
   const { t } = useTranslation();
-  const { addProjectToFavorites, createProject, updateProject } = useProject();
+  const { addProjectToFavorites, createProject, updateProject, fetchProjectDetails } = useProject();
   const { fetchTemplateById, getTemplateById, applyTemplate } = useProjectTemplates();
   // states
   const [shouldAutoSyncIdentifier, setShouldAutoSyncIdentifier] = useState(true);
@@ -134,19 +134,31 @@ export const CreateProjectForm = observer(function CreateProjectForm(props: TCre
 
     return createProject(workspaceSlug.toString(), formData)
       .then(async (res) => {
-        if (uploadedAssetUrl) {
-          await updateCoverImageStatus(res.id, uploadedAssetUrl);
-          await updateProject(workspaceSlug.toString(), res.id, { cover_image_url: uploadedAssetUrl });
-        } else if (coverImage && coverImage.startsWith("http")) {
-          await updateCoverImageStatus(res.id, coverImage);
-          await updateProject(workspaceSlug.toString(), res.id, { cover_image_url: coverImage });
+        try {
+          if (uploadedAssetUrl) {
+            await updateCoverImageStatus(res.id, uploadedAssetUrl);
+            await updateProject(workspaceSlug.toString(), res.id, { cover_image_url: uploadedAssetUrl });
+          } else if (coverImage && coverImage.startsWith("http")) {
+            await updateCoverImageStatus(res.id, coverImage);
+            await updateProject(workspaceSlug.toString(), res.id, { cover_image_url: coverImage });
+          }
+        } catch (error) {
+          // Cover asset linking is best-effort; do not block template apply / project open.
+          console.error("Failed to finalize project cover image:", error);
         }
 
         if (selectedTemplateId) {
           try {
             await applyTemplate(workspaceSlug.toString(), selectedTemplateId, res.id);
+            // Refresh project so feature toggles / sidebar reflect the template snapshot.
+            await fetchProjectDetails(workspaceSlug.toString(), res.id);
           } catch (error) {
             console.error("Failed to apply project template:", error);
+            setToast({
+              type: TOAST_TYPE.ERROR,
+              title: t("toast.error"),
+              message: t("something_went_wrong"),
+            });
           }
         }
 
