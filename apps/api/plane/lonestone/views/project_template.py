@@ -9,7 +9,7 @@ from rest_framework.response import Response
 
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
-from plane.db.models import Project, Workspace
+from plane.db.models import Project, ProjectMember, Workspace, WorkspaceMember
 from plane.lonestone.models import ProjectTemplate, Template
 from plane.lonestone.serializers import (
     ProjectTemplateDataSerializer,
@@ -17,6 +17,25 @@ from plane.lonestone.serializers import (
     TemplateSerializer,
 )
 from plane.lonestone.services import apply_project_template, build_project_template_snapshot
+
+
+def _can_mutate_project(*, user, slug: str, project_id) -> bool:
+    """Match ProjectViewSet.partial_update: workspace admin or project admin."""
+    if WorkspaceMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        role=ROLE.ADMIN.value,
+        is_active=True,
+    ).exists():
+        return True
+
+    return ProjectMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        project_id=project_id,
+        role=ROLE.ADMIN.value,
+        is_active=True,
+    ).exists()
 
 
 class ProjectTemplateEndpoint(BaseAPIView):
@@ -65,6 +84,11 @@ class ProjectTemplateEndpoint(BaseAPIView):
             )
             if project is None:
                 return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+            if not _can_mutate_project(user=request.user, slug=slug, project_id=project_id):
+                return Response(
+                    {"error": "You don't have the required permissions."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
             # Snapshot is the base. Drop empty list/dict overrides so clients cannot
             # accidentally wipe states/labels/work_items when also sending project_id.
             overrides = {
@@ -174,6 +198,12 @@ class ProjectTemplateApplyEndpoint(BaseAPIView):
 
         if not Project.objects.filter(id=project_id, workspace__slug=slug).exists():
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_mutate_project(user=request.user, slug=slug, project_id=project_id):
+            return Response(
+                {"error": "You don't have the required permissions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         try:
             apply_project_template(
