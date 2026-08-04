@@ -9,9 +9,9 @@ import type { IProjectTemplateStore } from "./templates/project-template.store";
 import { ProjectTemplateStore } from "./templates/project-template.store";
 
 /**
- * Lonestone edition root store.
+ * Extended edition root store.
  *
- * Extend CoreRootStore here with Lonestone-only stores (templates, etc.).
+ * Extend CoreRootStore here with edition-only stores (templates, etc.).
  * Instantiated via StoreProvider — do not construct CoreRootStore directly in app code.
  */
 export class RootStore extends CoreRootStore {

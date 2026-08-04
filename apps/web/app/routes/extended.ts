@@ -8,7 +8,7 @@ import { layout, route } from "@react-router/dev/routes";
 import type { RouteConfigEntry } from "@react-router/dev/routes";
 
 /**
- * Lonestone-only routes. Deep-merged into core via `mergeRoutes` in `routes.ts`.
+ * Extended-only routes. Deep-merged into core via `mergeRoutes` in `routes.ts`.
  * Keep additions here so `routes/core.ts` stays upstream-clean.
  */
 export const extendedRoutes: RouteConfigEntry[] = [

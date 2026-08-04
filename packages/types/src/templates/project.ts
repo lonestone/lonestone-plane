@@ -4,9 +4,9 @@
  * See the LICENSE file for details.
  */
 
-export type TLonestoneTemplateType = "project" | "workitem" | "page";
+export type TExtendedTemplateType = "project" | "workitem" | "page";
 
-/** Snapshot applied when creating a project from a Lonestone template. */
+/** Snapshot applied when creating a project from a template. */
 export type TProjectTemplateState = {
   id?: string;
   name: string;
@@ -64,14 +64,14 @@ export type TProjectTemplateSnapshot = {
   target_date?: string | null;
 };
 
-/** Workspace template row returned by Lonestone project-template APIs. */
+/** Workspace template row returned by project-template APIs. */
 export type TProjectTemplate = {
   id: string;
   name: string;
   description: string;
   description_html: string;
   description_stripped: string | null;
-  template_type: TLonestoneTemplateType;
+  template_type: TExtendedTemplateType;
   cover_image: string;
   workspace: string;
   template_data: TProjectTemplateSnapshot[];

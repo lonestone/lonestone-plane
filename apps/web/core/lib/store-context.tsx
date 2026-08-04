@@ -6,7 +6,7 @@
 
 import type { ReactElement } from "react";
 import { createContext } from "react";
-// Lonestone edition store (extends CoreRootStore)
+// Extended edition store (extends CoreRootStore)
 import { RootStore } from "@/plane-web/store/root.store";
 
 export let rootStore = new RootStore();

@@ -9,7 +9,7 @@ import type { TProjectTemplate, TProjectTemplateCreatePayload, TProjectTemplateU
 import { APIService } from "../api.service";
 
 /**
- * Lonestone project template API client (`/api/lonestone/...`).
+ * Extended project template API client (`/api/extended/...`).
  */
 export class ProjectTemplateService extends APIService {
   constructor(baseURL?: string) {
@@ -17,7 +17,7 @@ export class ProjectTemplateService extends APIService {
   }
 
   async list(workspaceSlug: string): Promise<TProjectTemplate[]> {
-    return this.get(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/`)
+    return this.get(`/api/extended/workspaces/${workspaceSlug}/project-templates/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -25,7 +25,7 @@ export class ProjectTemplateService extends APIService {
   }
 
   async retrieve(workspaceSlug: string, templateId: string): Promise<TProjectTemplate> {
-    return this.get(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/${templateId}/`)
+    return this.get(`/api/extended/workspaces/${workspaceSlug}/project-templates/${templateId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -33,7 +33,7 @@ export class ProjectTemplateService extends APIService {
   }
 
   async create(workspaceSlug: string, data: TProjectTemplateCreatePayload): Promise<TProjectTemplate> {
-    return this.post(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/`, data)
+    return this.post(`/api/extended/workspaces/${workspaceSlug}/project-templates/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -45,7 +45,7 @@ export class ProjectTemplateService extends APIService {
     templateId: string,
     data: TProjectTemplateUpdatePayload
   ): Promise<TProjectTemplate> {
-    return this.patch(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/${templateId}/`, data)
+    return this.patch(`/api/extended/workspaces/${workspaceSlug}/project-templates/${templateId}/`, data)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -53,7 +53,7 @@ export class ProjectTemplateService extends APIService {
   }
 
   async destroy(workspaceSlug: string, templateId: string): Promise<void> {
-    return this.delete(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/${templateId}/`)
+    return this.delete(`/api/extended/workspaces/${workspaceSlug}/project-templates/${templateId}/`)
       .then((response) => response?.data)
       .catch((error) => {
         throw error?.response?.data;
@@ -61,7 +61,7 @@ export class ProjectTemplateService extends APIService {
   }
 
   async apply(workspaceSlug: string, templateId: string, projectId: string): Promise<{ project_id: string }> {
-    return this.post(`/api/lonestone/workspaces/${workspaceSlug}/project-templates/${templateId}/apply/`, {
+    return this.post(`/api/extended/workspaces/${workspaceSlug}/project-templates/${templateId}/apply/`, {
       project_id: projectId,
     })
       .then((response) => response?.data)

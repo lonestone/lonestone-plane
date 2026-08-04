@@ -5,7 +5,7 @@
 from django.apps import AppConfig
 
 
-class LonestoneConfig(AppConfig):
-    name = "plane.lonestone"
-    label = "lonestone"
-    verbose_name = "Lonestone"
+class ExtendedConfig(AppConfig):
+    name = "plane.extended"
+    label = "extended"
+    verbose_name = "Extended"

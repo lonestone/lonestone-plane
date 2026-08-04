@@ -2,26 +2,26 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Lonestone edition URL routes."""
+"""Extended edition URL routes."""
 
 from django.urls import path
 
-from plane.lonestone.views import ProjectTemplateApplyEndpoint, ProjectTemplateEndpoint
+from plane.extended.views import ProjectTemplateApplyEndpoint, ProjectTemplateEndpoint
 
 urlpatterns = [
     path(
         "workspaces/<str:slug>/project-templates/",
         ProjectTemplateEndpoint.as_view(),
-        name="lonestone-project-templates",
+        name="extended-project-templates",
     ),
     path(
         "workspaces/<str:slug>/project-templates/<uuid:pk>/",
         ProjectTemplateEndpoint.as_view(),
-        name="lonestone-project-template-detail",
+        name="extended-project-template-detail",
     ),
     path(
         "workspaces/<str:slug>/project-templates/<uuid:pk>/apply/",
         ProjectTemplateApplyEndpoint.as_view(),
-        name="lonestone-project-template-apply",
+        name="extended-project-template-apply",
     ),
 ]

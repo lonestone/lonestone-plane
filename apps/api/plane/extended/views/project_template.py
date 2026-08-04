@@ -10,13 +10,13 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Project, ProjectMember, Workspace, WorkspaceMember
-from plane.lonestone.models import ProjectTemplate, Template
-from plane.lonestone.serializers import (
+from plane.extended.models import ProjectTemplate, Template
+from plane.extended.serializers import (
     ProjectTemplateDataSerializer,
     ProjectTemplateSerializer,
     TemplateSerializer,
 )
-from plane.lonestone.services import apply_project_template, build_project_template_snapshot
+from plane.extended.services import apply_project_template, build_project_template_snapshot
 
 
 def _can_mutate_project(*, user, slug: str, project_id) -> bool:
@@ -39,7 +39,7 @@ def _can_mutate_project(*, user, slug: str, project_id) -> bool:
 
 
 class ProjectTemplateEndpoint(BaseAPIView):
-    """CRUD for workspace project templates under `/api/lonestone/`."""
+    """CRUD for workspace project templates under `/api/extended/`."""
 
     def _project_templates_qs(self, slug: str):
         return Template.objects.filter(

@@ -20,7 +20,7 @@ export type TWorkItemTemplateSelect = {
 
 /**
  * Work-item template picker slot in the issue create/edit modal.
- * Replace this empty stub with the Lonestone work-item-templates UI.
+ * Replace this empty stub with the work-item-templates UI.
  */
 export function WorkItemTemplateSelect(_props: TWorkItemTemplateSelect) {
   return <></>;

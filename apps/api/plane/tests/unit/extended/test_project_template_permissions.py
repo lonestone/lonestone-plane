@@ -7,7 +7,7 @@ import uuid
 import pytest
 
 from plane.db.models import Project, ProjectMember, User, WorkspaceMember
-from plane.lonestone.views.project_template import _can_mutate_project
+from plane.extended.views.project_template import _can_mutate_project
 
 
 def _make_user(email: str) -> User:

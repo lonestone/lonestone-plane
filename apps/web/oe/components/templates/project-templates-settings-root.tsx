@@ -45,7 +45,7 @@ export const ProjectTemplatesSettingsRoot = observer(function ProjectTemplatesSe
   );
   const canCreate = allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE);
 
-  useSWR(canManage ? `LONESTONE_PROJECT_TEMPLATES_${workspaceSlug}` : null, () => fetchTemplates(workspaceSlug));
+  useSWR(canManage ? `EXTENDED_PROJECT_TEMPLATES_${workspaceSlug}` : null, () => fetchTemplates(workspaceSlug));
 
   const pageTitle = currentWorkspace?.name
     ? `${currentWorkspace.name} - ${t("workspace_settings.settings.templates.title")}`

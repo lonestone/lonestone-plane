@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Lonestone template models.
+"""Extended template models.
 
 Mirrors Plane EE's Template / ProjectTemplate shape, but lives in
-`plane.lonestone` with namespaced tables so upstream CE/EE merges stay clean.
+`plane.extended` with namespaced tables so upstream CE/EE merges stay clean.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ class Template(WorkspaceBaseModel):
     cover_image = models.TextField(blank=True, default="")
 
     class Meta:
-        db_table = "lonestone_templates"
+        db_table = "extended_templates"
         verbose_name = "Template"
         verbose_name_plural = "Templates"
         ordering = ("-created_at",)
@@ -55,7 +55,7 @@ class Template(WorkspaceBaseModel):
             models.UniqueConstraint(
                 fields=["name", "workspace", "template_type"],
                 condition=models.Q(deleted_at__isnull=True),
-                name="lonestone_template_unique_name_workspace_type",
+                name="extended_template_unique_name_workspace_type",
             )
         ]
 
@@ -80,7 +80,7 @@ class ProjectTemplate(BaseModel):
     workspace = models.ForeignKey(
         "db.Workspace",
         on_delete=models.CASCADE,
-        related_name="lonestone_project_templates",
+        related_name="extended_project_templates",
     )
     template = models.ForeignKey(
         Template,
@@ -132,7 +132,7 @@ class ProjectTemplate(BaseModel):
     target_date = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        db_table = "lonestone_project_templates"
+        db_table = "extended_project_templates"
         verbose_name = "Project Template"
         verbose_name_plural = "Project Templates"
         ordering = ("-created_at",)
@@ -140,7 +140,7 @@ class ProjectTemplate(BaseModel):
             models.UniqueConstraint(
                 fields=["name", "workspace"],
                 condition=models.Q(deleted_at__isnull=True),
-                name="lonestone_project_template_unique_name_workspace",
+                name="extended_project_template_unique_name_workspace",
             )
         ]
 

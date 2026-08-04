@@ -4,7 +4,7 @@
 
 from rest_framework import serializers
 
-from plane.lonestone.models import ProjectTemplate, Template
+from plane.extended.models import ProjectTemplate, Template
 
 
 class TemplateSerializer(serializers.ModelSerializer):

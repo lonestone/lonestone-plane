@@ -18,7 +18,7 @@ import { getTabIndex } from "@plane/utils";
 // components
 import { CoverImage } from "@/components/common/cover-image";
 import { ImagePickerPopover } from "@/components/core/image-picker-popover";
-// Lonestone edition
+// Extended edition
 import { ProjectTemplateSelect } from "@/plane-web/components/projects/create/template-select";
 
 type Props = {

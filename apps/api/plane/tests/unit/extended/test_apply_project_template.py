@@ -5,8 +5,8 @@
 import pytest
 
 from plane.db.models import Issue, Label, Project, ProjectMember, State
-from plane.lonestone.models import ProjectTemplate, Template
-from plane.lonestone.services import apply_project_template
+from plane.extended.models import ProjectTemplate, Template
+from plane.extended.services import apply_project_template
 
 
 @pytest.mark.unit

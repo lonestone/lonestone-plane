@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Apply a Lonestone project template snapshot onto an existing project."""
+"""Apply a Extended project template snapshot onto an existing project."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import random
 from django.db import transaction
 
 from plane.db.models import Issue, Label, Project, State
-from plane.lonestone.models import ProjectTemplate, Template
+from plane.extended.models import ProjectTemplate, Template
 
 
 def _random_color() -> str:
