@@ -179,6 +179,32 @@ class ProjectTemplateEndpoint(BaseAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class ProjectTemplatePreviewEndpoint(BaseAPIView):
+    """Preview a project template snapshot built from an existing project."""
+
+    @allow_permission([ROLE.ADMIN], level="WORKSPACE")
+    def get(self, request, slug):
+        project_id = request.GET.get("project_id")
+        if not project_id:
+            return Response({"error": "project_id is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        project = (
+            Project.objects.filter(id=project_id, workspace__slug=slug)
+            .select_related("cover_image_asset")
+            .first()
+        )
+        if project is None:
+            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        if not _can_mutate_project(user=request.user, slug=slug, project_id=project_id):
+            return Response(
+                {"error": "You don't have the required permissions."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        return Response(build_project_template_snapshot(project), status=status.HTTP_200_OK)
+
+
 class ProjectTemplateApplyEndpoint(BaseAPIView):
     """Apply a project template snapshot to an existing project."""
 

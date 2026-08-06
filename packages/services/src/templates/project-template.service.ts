@@ -5,7 +5,12 @@
  */
 
 import { API_BASE_URL } from "@plane/constants";
-import type { TProjectTemplate, TProjectTemplateCreatePayload, TProjectTemplateUpdatePayload } from "@plane/types";
+import type {
+  TProjectTemplate,
+  TProjectTemplateCreatePayload,
+  TProjectTemplateSnapshot,
+  TProjectTemplateUpdatePayload,
+} from "@plane/types";
 import { APIService } from "../api.service";
 
 /**
@@ -14,6 +19,16 @@ import { APIService } from "../api.service";
 export class ProjectTemplateService extends APIService {
   constructor(baseURL?: string) {
     super(baseURL || API_BASE_URL);
+  }
+
+  async previewFromProject(workspaceSlug: string, projectId: string): Promise<TProjectTemplateSnapshot> {
+    return this.get(`/api/extended/workspaces/${workspaceSlug}/project-templates/preview/`, {
+      params: { project_id: projectId },
+    })
+      .then((response) => response?.data)
+      .catch((error) => {
+        throw error?.response?.data;
+      });
   }
 
   async list(workspaceSlug: string): Promise<TProjectTemplate[]> {

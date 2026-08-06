@@ -7,7 +7,12 @@
 import { action, computed, makeObservable, observable, runInAction } from "mobx";
 import { computedFn } from "mobx-utils";
 import { projectTemplateService } from "@plane/services";
-import type { TProjectTemplate, TProjectTemplateCreatePayload, TProjectTemplateUpdatePayload } from "@plane/types";
+import type {
+  TProjectTemplate,
+  TProjectTemplateCreatePayload,
+  TProjectTemplateSnapshot,
+  TProjectTemplateUpdatePayload,
+} from "@plane/types";
 import type { CoreRootStore } from "@/store/root.store";
 
 export interface IProjectTemplateStore {
@@ -17,6 +22,7 @@ export interface IProjectTemplateStore {
   getTemplateById: (templateId: string) => TProjectTemplate | undefined;
   fetchTemplates: (workspaceSlug: string) => Promise<TProjectTemplate[]>;
   fetchTemplateById: (workspaceSlug: string, templateId: string) => Promise<TProjectTemplate>;
+  previewFromProject: (workspaceSlug: string, projectId: string) => Promise<TProjectTemplateSnapshot>;
   createTemplate: (workspaceSlug: string, data: TProjectTemplateCreatePayload) => Promise<TProjectTemplate>;
   updateTemplate: (
     workspaceSlug: string,
@@ -39,6 +45,7 @@ export class ProjectTemplateStore implements IProjectTemplateStore {
       templates: computed,
       fetchTemplates: action,
       fetchTemplateById: action,
+      previewFromProject: action,
       createTemplate: action,
       updateTemplate: action,
       deleteTemplate: action,
@@ -79,6 +86,9 @@ export class ProjectTemplateStore implements IProjectTemplateStore {
     });
     return response;
   };
+
+  previewFromProject = async (workspaceSlug: string, projectId: string) =>
+    projectTemplateService.previewFromProject(workspaceSlug, projectId);
 
   createTemplate = async (workspaceSlug: string, data: TProjectTemplateCreatePayload) => {
     const response = await projectTemplateService.create(workspaceSlug, data);

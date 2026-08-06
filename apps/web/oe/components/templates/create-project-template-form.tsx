@@ -4,7 +4,7 @@
  * See the LICENSE file for details.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react";
 import { Controller, FormProvider, useForm } from "react-hook-form";
 import { ETabIndices } from "@plane/constants";
@@ -15,6 +15,7 @@ import type {
   TProject,
   TProjectTemplate,
   TProjectTemplateLabel,
+  TProjectTemplateSnapshot,
   TProjectTemplateState,
   TProjectTemplateWorkItem,
 } from "@plane/types";
@@ -24,7 +25,6 @@ import ProjectCreateHeader from "@/components/project/create/header";
 import { ProjectDropdown } from "@/components/dropdowns/project/dropdown";
 import { ProjectAttributes } from "@/components/projects/create/attributes";
 import { getProjectFormValues } from "@/components/projects/create/utils";
-import { useProject } from "@/hooks/store/use-project";
 import { usePlatformOS } from "@/hooks/use-platform-os";
 import { useProjectTemplates } from "@/plane-web/hooks/store/use-project-templates";
 import { ProjectTemplateSnapshotFields } from "./project-template-snapshot-fields";
@@ -55,29 +55,51 @@ const getDefaultFormValues = (): TCreateProjectTemplateFormValues => ({
   work_items: [],
 });
 
-const getFormValuesFromTemplate = (template: TProjectTemplate): TCreateProjectTemplateFormValues => {
-  const snapshot = template.template_data?.[0];
+const getFormValuesFromSnapshot = (
+  snapshot: TProjectTemplateSnapshot,
+  projectId: string | null = null
+): TCreateProjectTemplateFormValues => {
   const projectLead =
-    snapshot?.project_lead && typeof snapshot.project_lead === "object" && "id" in snapshot.project_lead
+    snapshot.project_lead && typeof snapshot.project_lead === "object" && "id" in snapshot.project_lead
       ? String(snapshot.project_lead.id)
       : null;
 
   return {
     ...getDefaultFormValues(),
-    name: template.name || snapshot?.name || "",
-    description: template.description || snapshot?.description || "",
-    cover_image_url: template.cover_image || snapshot?.cover_image || getProjectFormValues().cover_image_url,
-    network: snapshot?.network ?? 2,
-    logo_props: (snapshot?.logo_props as TProject["logo_props"]) || getProjectFormValues().logo_props,
+    name: snapshot.name || "",
+    description: snapshot.description || "",
+    cover_image_url: snapshot.cover_image || getProjectFormValues().cover_image_url,
+    network: snapshot.network ?? 2,
+    logo_props: (snapshot.logo_props as TProject["logo_props"]) || getProjectFormValues().logo_props,
     project_lead: projectLead,
-    module_view: snapshot?.module_view ?? true,
-    cycle_view: snapshot?.cycle_view ?? true,
-    issue_views_view: snapshot?.issue_views_view ?? true,
-    page_view: snapshot?.page_view ?? true,
-    inbox_view: snapshot?.intake_view ?? false,
-    states: snapshot?.states ?? [],
-    labels: snapshot?.labels ?? [],
-    work_items: snapshot?.work_items ?? [],
+    module_view: snapshot.module_view ?? true,
+    cycle_view: snapshot.cycle_view ?? true,
+    issue_views_view: snapshot.issue_views_view ?? true,
+    page_view: snapshot.page_view ?? true,
+    inbox_view: snapshot.intake_view ?? false,
+    states: snapshot.states ?? [],
+    labels: snapshot.labels ?? [],
+    work_items: snapshot.work_items ?? [],
+    project_id: projectId,
+  };
+};
+
+const getFormValuesFromTemplate = (template: TProjectTemplate): TCreateProjectTemplateFormValues => {
+  const snapshot = template.template_data?.[0];
+  if (!snapshot) {
+    return {
+      ...getDefaultFormValues(),
+      name: template.name || "",
+      description: template.description || "",
+      cover_image_url: template.cover_image || getProjectFormValues().cover_image_url,
+    };
+  }
+
+  return {
+    ...getFormValuesFromSnapshot(snapshot),
+    name: template.name || snapshot.name || "",
+    description: template.description || snapshot.description || "",
+    cover_image_url: template.cover_image || snapshot.cover_image || getProjectFormValues().cover_image_url,
     project_id: null,
   };
 };
@@ -119,10 +141,10 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
   const { workspaceSlug, onClose, onSuccess, template = null } = props;
   const { t } = useTranslation();
   const { isMobile } = usePlatformOS();
-  const { getProjectById } = useProject();
-  const { createTemplate, updateTemplate } = useProjectTemplates();
+  const { createTemplate, updateTemplate, previewFromProject } = useProjectTemplates();
   const { getIndex } = getTabIndex(ETabIndices.PROJECT_CREATE, isMobile);
   const isEditMode = Boolean(template);
+  const [isPrefilling, setIsPrefilling] = useState(false);
 
   const methods = useForm<TCreateProjectTemplateFormValues>({
     defaultValues: template ? getFormValuesFromTemplate(template) : getDefaultFormValues(),
@@ -132,7 +154,6 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
     control,
     handleSubmit,
     reset,
-    setValue,
     formState: { errors, isSubmitting },
   } = methods;
 
@@ -147,28 +168,23 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
     }, 300);
   };
 
-  const handleSourceProjectChange = (projectId: string) => {
-    setValue("project_id", projectId, { shouldDirty: true });
-    const project = getProjectById(projectId);
-    if (!project) return;
-
-    if (project.name) setValue("name", project.name, { shouldDirty: true });
-    if (project.description !== undefined) setValue("description", project.description, { shouldDirty: true });
-    if (project.network !== undefined) setValue("network", project.network, { shouldDirty: true });
-    if (project.logo_props) setValue("logo_props", project.logo_props, { shouldDirty: true });
-    if (project.cover_image_url) setValue("cover_image_url", project.cover_image_url, { shouldDirty: true });
-    if (project.module_view !== undefined) setValue("module_view", project.module_view, { shouldDirty: true });
-    if (project.cycle_view !== undefined) setValue("cycle_view", project.cycle_view, { shouldDirty: true });
-    if (project.issue_views_view !== undefined)
-      setValue("issue_views_view", project.issue_views_view, { shouldDirty: true });
-    if (project.page_view !== undefined) setValue("page_view", project.page_view, { shouldDirty: true });
-    if (project.inbox_view !== undefined) setValue("inbox_view", project.inbox_view, { shouldDirty: true });
-    if (project.project_lead !== undefined) {
-      const leadId =
-        typeof project.project_lead === "object" && project.project_lead
-          ? project.project_lead.id
-          : project.project_lead;
-      setValue("project_lead", leadId ?? null, { shouldDirty: true });
+  const handleSourceProjectChange = async (projectId: string) => {
+    setIsPrefilling(true);
+    try {
+      const snapshot = await previewFromProject(workspaceSlug, projectId);
+      reset(getFormValuesFromSnapshot(snapshot, projectId));
+    } catch {
+      reset({
+        ...getDefaultFormValues(),
+        project_id: projectId,
+      });
+      setToast({
+        type: TOAST_TYPE.ERROR,
+        title: t("error"),
+        message: t("something_went_wrong_please_try_again"),
+      });
+    } finally {
+      setIsPrefilling(false);
     }
   };
 
@@ -245,16 +261,21 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
                   <div className="h-7">
                     <ProjectDropdown
                       value={value}
-                      onChange={handleSourceProjectChange}
+                      onChange={(projectId) => {
+                        void handleSourceProjectChange(projectId);
+                      }}
                       multiple={false}
                       buttonVariant="border-with-text"
                       placeholder={t("templates.settings.form.project.source_project.placeholder")}
                       tabIndex={getIndex("cover_image")}
+                      disabled={isPrefilling}
                     />
                   </div>
                 )}
               />
-              <p className="text-xs text-tertiary">{t("templates.settings.form.project.source_project.helper")}</p>
+              <p className="text-xs text-tertiary">
+                {isPrefilling ? t("loading") : t("templates.settings.form.project.source_project.helper")}
+              </p>
             </div>
           )}
 
@@ -281,6 +302,7 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
                     placeholder={t("templates.settings.form.project.template.name.placeholder")}
                     className="w-full"
                     tabIndex={getIndex("name")}
+                    disabled={isPrefilling}
                   />
                 )}
               />
@@ -299,6 +321,7 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
                   className="!h-24 w-full text-13"
                   hasError={Boolean(errors.description)}
                   tabIndex={getIndex("description")}
+                  disabled={isPrefilling}
                 />
               )}
             />
@@ -316,7 +339,7 @@ export const CreateProjectTemplateForm = observer(function CreateProjectTemplate
             variant="primary"
             size="lg"
             type="button"
-            loading={isSubmitting}
+            loading={isSubmitting || isPrefilling}
             tabIndex={getIndex("submit")}
             onClick={handleSubmit(onSubmit)}
           >

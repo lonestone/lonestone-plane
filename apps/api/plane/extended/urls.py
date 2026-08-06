@@ -6,13 +6,22 @@
 
 from django.urls import path
 
-from plane.extended.views import ProjectTemplateApplyEndpoint, ProjectTemplateEndpoint
+from plane.extended.views import (
+    ProjectTemplateApplyEndpoint,
+    ProjectTemplateEndpoint,
+    ProjectTemplatePreviewEndpoint,
+)
 
 urlpatterns = [
     path(
         "workspaces/<str:slug>/project-templates/",
         ProjectTemplateEndpoint.as_view(),
         name="extended-project-templates",
+    ),
+    path(
+        "workspaces/<str:slug>/project-templates/preview/",
+        ProjectTemplatePreviewEndpoint.as_view(),
+        name="extended-project-template-preview",
     ),
     path(
         "workspaces/<str:slug>/project-templates/<uuid:pk>/",
