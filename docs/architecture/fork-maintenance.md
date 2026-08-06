@@ -129,11 +129,11 @@ This only works for additive changes. For anything that requires a different bui
 
 ### Tagging strategy
 
-| Tag | Meaning |
-|-----|---------|
-| `latest` | Latest release on your fork |
-| `YYYY-MM-DD` | Dated release |
-| `<git-sha>` | Exact build (for rollbacks) |
+| Tag                       | Meaning                                           |
+| ------------------------- | ------------------------------------------------- |
+| `latest`                  | Latest release on your fork                       |
+| `YYYY-MM-DD`              | Dated release                                     |
+| `<git-sha>`               | Exact build (for rollbacks)                       |
 | `upstream-<upstream-sha>` | Records which upstream commit this was built from |
 
 Storing the upstream commit in the tag makes it easy to answer "are we more than N weeks behind upstream?"
@@ -175,18 +175,19 @@ Your `oe/` folder starts as a copy of `ce/`, and you extend from there. Since `t
 
 ### Tier your changes by conflict risk
 
-| Tier | Where | Conflict risk | Examples |
-|------|-------|--------------|---------|
-| **Safe** | `oe/` (your edition layer) | Near-zero | New stores, new components, new hooks, feature overrides |
-| **Moderate** | `packages/` (shared packages) | Low–medium | New shared types, new service methods |
-| **Risky** | `core/` | High | Changes to shared layout, root store constructor |
-| **Very risky** | `ce/` | Medium–high | Overrides that upstream also changes |
-| **Extremely risky** | `apps/api/plane/db/models/` | High | New model fields, new models |
-| **Nuclear** | `pnpm-lock.yaml` | Always conflicts | Every upstream update touches this |
+| Tier                | Where                         | Conflict risk    | Examples                                                 |
+| ------------------- | ----------------------------- | ---------------- | -------------------------------------------------------- |
+| **Safe**            | `oe/` (your edition layer)    | Near-zero        | New stores, new components, new hooks, feature overrides |
+| **Moderate**        | `packages/` (shared packages) | Low–medium       | New shared types, new service methods                    |
+| **Risky**           | `core/`                       | High             | Changes to shared layout, root store constructor         |
+| **Very risky**      | `ce/`                         | Medium–high      | Overrides that upstream also changes                     |
+| **Extremely risky** | `apps/api/plane/db/models/`   | High             | New model fields, new models                             |
+| **Nuclear**         | `pnpm-lock.yaml`              | Always conflicts | Every upstream update touches this                       |
 
 ### Frontend: adding a new feature
 
 **New store** — create `oe/store/my-feature.store.ts`, extend `CoreRootStore` in `oe/store/root.store.ts`:
+
 ```ts
 // oe/store/root.store.ts
 import { CoreRootStore } from "@/store/root.store";
@@ -209,31 +210,34 @@ export class RootStore extends CoreRootStore {
 
 ### Backend: adding a new feature
 
-The Django API has no clean `ce/`/`ee/` split, so you need a different strategy:
+The Django API has no clean `ce/`/`ee/` split. **All fork-specific backend code lives in one namespaced app: `plane.extended`.**
 
-**New Django app (recommended)** — create `apps/api/plane/my_feature/` as a standalone Django app:
-```python
-# apps/api/plane/my_feature/apps.py
-class MyFeatureConfig(AppConfig):
-    name = "plane.my_feature"
-```
+| Concern         | Convention                                                           |
+| --------------- | -------------------------------------------------------------------- |
+| Django package  | `apps/api/plane/extended/`                                           |
+| App label       | `extended`                                                           |
+| DB tables       | `extended_*` (never write into `plane.db` tables from new models)    |
+| HTTP API prefix | `/api/extended/...`                                                  |
+| Tests           | `apps/api/plane/tests/unit/extended/` (and contract tests as needed) |
 
-Register it in `settings/common.py`:
+Do **not** create additional top-level Django apps (`plane.my_feature`, `plane.lonestone`, …) for new product work. Add modules under `plane.extended` instead (e.g. `extended/models/`, `extended/views/`, `extended/services/`).
+
+It is already registered:
+
 ```python
+# apps/api/plane/settings/common.py
 INSTALLED_APPS = [
     ...
-    "plane.my_feature",   # your addition
+    "plane.extended",
 ]
+
+# apps/api/plane/urls.py
+path("api/extended/", include("plane.extended.urls")),
 ```
 
-Add URLs in `plane/urls.py`:
-```python
-path("api/v1/my-feature/", include("plane.my_feature.urls")),
-```
+New routes go in `plane/extended/urls.py`. The only upstream-touching lines for the backend seam are the `INSTALLED_APPS` entry and the root `urls.py` include — both already present.
 
-All models, views, serializers, tasks, and URLs stay inside your app. The only files you touch in the existing structure are `settings/common.py` (1 line) and `plane/urls.py` (1 line). Both are stable files that rarely conflict.
-
-**New fields on existing models** — this is the danger zone (see below).
+**New fields on existing models** — this is the danger zone (see below); prefer companion models in `plane.extended` with `extended_*` tables.
 
 ---
 
@@ -245,9 +249,9 @@ This is the **hardest problem** in fork maintenance.
 
 Every upstream release adds new migration files in `apps/api/plane/db/migrations/`. There are already 122. When upstream adds migration `0122_xxx.py` and you have also added your own `0122_my_feature.py`, the numbers collide.
 
-**Strategy A: namespaced migrations in your own app (recommended)**
+**Strategy A: namespaced migrations in `plane.extended` (required)**
 
-Keep all your model additions in your own Django app (`plane.my_feature`). Its migrations are in `apps/api/plane/my_feature/migrations/` and never conflict with `plane.db.migrations`. Your models FK into upstream models freely (Django supports cross-app FK). This only fails if you need to add a field to an existing upstream model.
+Keep all fork model additions in `plane.extended`. Its migrations live in `apps/api/plane/extended/migrations/` and never conflict with `plane.db.migrations`. Models may FK into upstream models freely (Django supports cross-app FK). This only fails if you need to add a column to an existing upstream table — prefer a OneToOne companion model in `extended` instead.
 
 **Strategy B: dependency-based migration ordering**
 
@@ -272,10 +276,12 @@ Give your migrations in `plane.db` a custom prefix (e.g. `9000_`, `9001_`) so th
 **The squash trap**: Do not squash your migrations. If you squash and upstream hasn't squashed, replaying history becomes complex.
 
 **Practical rule**: On every upstream merge, immediately run:
+
 ```bash
 python manage.py migrate --check
 python manage.py showmigrations
 ```
+
 And resolve any ordering issues before doing anything else.
 
 ### 2. `pnpm-lock.yaml` conflicts
@@ -283,6 +289,7 @@ And resolve any ordering issues before doing anything else.
 At 559 KB, this file conflicts on nearly every upstream merge. You cannot meaningfully resolve it manually.
 
 **Recommended resolution:**
+
 ```bash
 git checkout --theirs pnpm-lock.yaml   # take upstream's lockfile
 pnpm install                            # re-add your packages on top
@@ -314,6 +321,7 @@ Automate this in CI as a review step.
 When upstream refactors a `core/` component that you override in `oe/`, your override may silently become stale (wrong props, missing required context). TypeScript catches most of this, but not all (especially runtime store cross-references).
 
 **Mitigation**: TypeScript strict mode + full type check as a CI gate:
+
 ```bash
 pnpm check:types   # must pass on every merge
 ```
@@ -404,17 +412,18 @@ You can follow the same pattern for your own additions.
 
 ## Summary: The Minimal-Conflict Setup
 
-| Layer | What you do |
-|-------|------------|
-| `apps/web/oe/` | Your edition layer (copy of `ce/` + your additions) |
-| `apps/web/tsconfig.json` | Change `ce` → `oe` in the `@/plane-web` alias |
-| `apps/api/plane/our_app/` | Your Django app (models, views, urls, tasks) |
-| `apps/api/plane/settings/common.py` | Add `plane.our_app` to INSTALLED_APPS (+1 line) |
-| `apps/api/plane/urls.py` | Add your URL prefix (+1 line) |
-| `apps/web/app/` | New React Router route files (no conflicts) |
-| `packages/` | New shared packages if needed |
+| Layer                               | What you do                                         |
+| ----------------------------------- | --------------------------------------------------- |
+| `apps/web/oe/`                      | Edition layer (`@/plane-web` → `./oe/*`)            |
+| `apps/web/app/routes/extended.ts`   | Fork-only routes merged into core routes            |
+| `apps/api/plane/extended/`          | **All** fork Django models, views, urls, tasks      |
+| `apps/api/plane/settings/common.py` | `plane.extended` in `INSTALLED_APPS` (already set)  |
+| `apps/api/plane/urls.py`            | `api/extended/` include (already set)               |
+| `apps/web/app/`                     | New React Router page files when needed             |
+| `packages/`                         | Shared types/services for extended APIs when needed |
 
 Files you **never touch**:
+
 - `apps/web/core/` — upstream only
 - `apps/web/ce/` — upstream only (read it, diff it, but don't edit it)
 - `apps/api/plane/db/models/` — upstream only (add new models in your own app)
