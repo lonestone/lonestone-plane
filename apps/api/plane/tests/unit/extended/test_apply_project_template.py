@@ -4,9 +4,10 @@
 
 import pytest
 
-from plane.db.models import Issue, Label, Project, ProjectMember, State
+from plane.db.models import Issue, Label, Project, ProjectMember, State, Workspace
 from plane.extended.models import ProjectTemplate, Template
 from plane.extended.services import apply_project_template
+from plane.extended.serializers import ProjectTemplateSerializer
 
 
 @pytest.mark.unit
@@ -140,3 +141,89 @@ class TestApplyProjectTemplate:
         assert "<script" not in (issue.description_html or "").lower()
         assert "onerror" not in (issue.description_html or "").lower()
         assert "hi" in (issue.description_html or "")
+
+    def test_apply_ignores_snapshot_from_another_workspace(self, workspace, create_user):
+        other_workspace = Workspace.objects.create(
+            name="Other Workspace",
+            owner=create_user,
+            slug="other-workspace",
+        )
+        template = Template.objects.create(
+            workspace=workspace,
+            name="Local template",
+            template_type=Template.TemplateType.PROJECT,
+        )
+        # Simulate a poisoned linkage: snapshot points at this template but belongs
+        # to a different workspace (e.g. after a client-controlled template FK rewrite).
+        ProjectTemplate.objects.create(
+            workspace=other_workspace,
+            template=template,
+            name="Foreign snapshot",
+            description="",
+            network=2,
+            cycle_view=False,
+            module_view=False,
+            states=[
+                {"name": "Injected", "color": "#ff0000", "group": "unstarted", "sequence": 1000, "default": True}
+            ],
+            work_items=[{"name": "Injected item", "description_html": "<p>nope</p>"}],
+        )
+        project = Project.objects.create(
+            name="Target",
+            identifier="TGT",
+            workspace=workspace,
+            network=2,
+            cycle_view=True,
+            module_view=True,
+        )
+        ProjectMember.objects.create(project=project, member=create_user, role=20, workspace=workspace)
+        State.objects.create(
+            workspace=workspace,
+            project=project,
+            name="Keep",
+            color="#000000",
+            group="backlog",
+            sequence=1,
+            default=True,
+        )
+
+        with pytest.raises(ProjectTemplate.DoesNotExist):
+            apply_project_template(
+                template_id=str(template.id),
+                project_id=str(project.id),
+                user_id=str(create_user.id),
+            )
+
+        project.refresh_from_db()
+        assert project.cycle_view is True
+        assert project.module_view is True
+        assert not Issue.objects.filter(project=project).exists()
+        assert set(State.objects.filter(project=project).values_list("name", flat=True)) == {"Keep"}
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestProjectTemplateSerializerWorkspaceIsolation:
+    def test_template_and_workspace_are_read_only(self, workspace):
+        template = Template.objects.create(
+            workspace=workspace,
+            name="Locked",
+            template_type=Template.TemplateType.PROJECT,
+        )
+        snapshot = ProjectTemplate.objects.create(
+            workspace=workspace,
+            template=template,
+            name="Locked",
+            description="",
+            network=2,
+        )
+        serializer = ProjectTemplateSerializer(
+            snapshot,
+            data={"template": None, "workspace": None, "name": "Still locked"},
+            partial=True,
+        )
+        assert serializer.is_valid(), serializer.errors
+        updated = serializer.save()
+        assert updated.template_id == template.id
+        assert updated.workspace_id == workspace.id
+        assert updated.name == "Still locked"

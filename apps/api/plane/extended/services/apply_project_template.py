@@ -31,7 +31,12 @@ def apply_project_template(*, template_id: str, project_id: str, user_id: str | 
         id=template_id,
         template_type=Template.TemplateType.PROJECT,
     )
-    snapshot = ProjectTemplate.objects.filter(template_id=template.id).first()
+    # Always bind snapshot to the template's workspace so a re-linked FK cannot
+    # pull configuration from another workspace into this apply.
+    snapshot = ProjectTemplate.objects.filter(
+        template_id=template.id,
+        workspace_id=template.workspace_id,
+    ).first()
     if snapshot is None:
         raise ProjectTemplate.DoesNotExist("Project template snapshot not found")
 

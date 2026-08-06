@@ -109,6 +109,8 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
         )
         read_only_fields = (
             "id",
+            # Clients must not re-point snapshot ↔ template across workspaces.
+            "template",
             "workspace",
             "created_at",
             "updated_at",
@@ -119,6 +121,16 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if "work_items" in attrs:
             attrs["work_items"] = _sanitize_work_items(attrs["work_items"])
+
+        template = attrs.get("template") or getattr(self.instance, "template", None)
+        workspace = attrs.get("workspace") or getattr(self.instance, "workspace", None)
+        if template is not None and workspace is not None:
+            template_workspace_id = getattr(template, "workspace_id", None) or getattr(template, "workspace", None)
+            workspace_id = getattr(workspace, "id", workspace)
+            if template_workspace_id is not None and str(template_workspace_id) != str(workspace_id):
+                raise serializers.ValidationError(
+                    {"template": ["Template must belong to the same workspace as the snapshot."]}
+                )
         return attrs
 
 
