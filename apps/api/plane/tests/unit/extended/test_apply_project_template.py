@@ -200,6 +200,66 @@ class TestApplyProjectTemplate:
         assert not Issue.objects.filter(project=project).exists()
         assert set(State.objects.filter(project=project).values_list("name", flat=True)) == {"Keep"}
 
+    def test_apply_does_not_cascade_delete_existing_issues(self, workspace, create_user):
+        template = Template.objects.create(
+            workspace=workspace,
+            name="States kit",
+            template_type=Template.TemplateType.PROJECT,
+        )
+        ProjectTemplate.objects.create(
+            workspace=workspace,
+            template=template,
+            name="States kit",
+            description="",
+            network=2,
+            cycle_view=False,
+            states=[
+                {"name": "Ready", "color": "#3f76ff", "group": "unstarted", "sequence": 1000, "default": True},
+                {"name": "Done", "color": "#16a34a", "group": "completed", "sequence": 2000, "default": False},
+            ],
+            work_items=[{"name": "Seeded", "description_html": "<p></p>"}],
+        )
+        project = Project.objects.create(
+            name="Busy Project",
+            identifier="BUSY",
+            workspace=workspace,
+            network=2,
+            cycle_view=True,
+        )
+        ProjectMember.objects.create(project=project, member=create_user, role=20, workspace=workspace)
+        old_state = State.objects.create(
+            workspace=workspace,
+            project=project,
+            name="In Progress",
+            color="#000000",
+            group="started",
+            sequence=1,
+            default=True,
+        )
+        existing_issue = Issue.objects.create(
+            workspace=workspace,
+            project=project,
+            name="Keep me",
+            state=old_state,
+            created_by=create_user,
+        )
+
+        apply_project_template(
+            template_id=str(template.id),
+            project_id=str(project.id),
+            user_id=str(create_user.id),
+        )
+
+        existing_issue.refresh_from_db()
+        assert Issue.objects.filter(id=existing_issue.id).exists()
+        assert existing_issue.state_id == old_state.id
+        assert State.objects.filter(project=project, name="In Progress").exists()
+        assert State.objects.filter(project=project, name="Ready", default=True).exists()
+        assert State.objects.filter(project=project, name="Done").exists()
+        assert Issue.objects.filter(project=project, name="Seeded").exists()
+        project.refresh_from_db()
+        assert project.cycle_view is False
+
 
 @pytest.mark.unit
 @pytest.mark.django_db

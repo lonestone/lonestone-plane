@@ -10,7 +10,7 @@ import random
 
 from django.db import transaction
 
-from plane.db.models import Issue, Label, Project, State
+from plane.db.models import DraftIssue, Issue, Label, Project, State
 from plane.extended.models import ProjectTemplate, Template
 from plane.utils.content_validator import validate_html_content
 
@@ -23,6 +23,90 @@ def _sanitize_description_html(raw_html: str | None) -> str:
     """Match issue create/update serializers: sanitize before persisting Issue HTML."""
     _, _, sanitized_html = validate_html_content(raw_html or "<p></p>")
     return sanitized_html if sanitized_html is not None else "<p></p>"
+
+
+def _project_has_work_items(project_id) -> bool:
+    """Issues/drafts CASCADE when their state is hard-deleted — treat either as blocking."""
+    return (
+        Issue.objects.filter(project_id=project_id).exists()
+        or DraftIssue.objects.filter(project_id=project_id).exists()
+    )
+
+
+def _normalize_state_payloads(states: list) -> list[dict]:
+    payloads = []
+    for state in states:
+        if not isinstance(state, dict) or not state.get("name"):
+            continue
+        payloads.append(
+            {
+                "name": str(state["name"])[:255],
+                "color": state.get("color") or _random_color(),
+                "group": state.get("group", "backlog"),
+                "sequence": state.get("sequence", 15000),
+                "default": bool(state.get("default", False)),
+            }
+        )
+    if payloads and not any(state["default"] for state in payloads):
+        payloads[0]["default"] = True
+    return payloads
+
+
+def _apply_project_states(*, project: Project, states: list) -> None:
+    """Replace states only when safe; otherwise upsert by name (never cascade-delete issues)."""
+    payloads = _normalize_state_payloads(states)
+    if not payloads:
+        return
+
+    existing_qs = State.objects.filter(project_id=project.id).exclude(group="triage")
+
+    if not _project_has_work_items(project.id):
+        for existing in existing_qs:
+            existing.delete(soft=False)
+        State.objects.bulk_create(
+            [
+                State(
+                    workspace_id=project.workspace_id,
+                    project_id=project.id,
+                    name=payload["name"],
+                    color=payload["color"],
+                    group=payload["group"],
+                    sequence=payload["sequence"],
+                    default=payload["default"],
+                )
+                for payload in payloads
+            ]
+        )
+        return
+
+    # Non-empty project: match Plane's "only empty states can be deleted" invariant.
+    existing_by_name = {state.name.lower(): state for state in existing_qs}
+    default_name = next((payload["name"] for payload in payloads if payload["default"]), None)
+
+    for payload in payloads:
+        key = payload["name"].lower()
+        existing = existing_by_name.get(key)
+        if existing is None:
+            created = State.objects.create(
+                workspace_id=project.workspace_id,
+                project_id=project.id,
+                name=payload["name"],
+                color=payload["color"],
+                group=payload["group"],
+                sequence=payload["sequence"],
+                default=False,
+            )
+            existing_by_name[key] = created
+            continue
+
+        existing.color = payload["color"]
+        existing.group = payload["group"]
+        existing.sequence = payload["sequence"]
+        existing.save(update_fields=["color", "group", "sequence", "updated_at"])
+
+    if default_name:
+        State.objects.filter(project_id=project.id).exclude(group="triage").update(default=False)
+        State.objects.filter(project_id=project.id, name=default_name).exclude(group="triage").update(default=True)
 
 
 @transaction.atomic
@@ -73,23 +157,7 @@ def apply_project_template(*, template_id: str, project_id: str, user_id: str | 
         )
 
     if isinstance(snapshot.states, list) and snapshot.states:
-        for existing in State.objects.filter(project_id=project.id).exclude(group="triage"):
-            existing.delete(soft=False)
-        State.objects.bulk_create(
-            [
-                State(
-                    workspace_id=project.workspace_id,
-                    project_id=project.id,
-                    name=state.get("name", "State")[:255],
-                    color=state.get("color") or _random_color(),
-                    group=state.get("group", "backlog"),
-                    sequence=state.get("sequence", 15000),
-                    default=bool(state.get("default", False)),
-                )
-                for state in snapshot.states
-                if isinstance(state, dict) and state.get("name")
-            ]
-        )
+        _apply_project_states(project=project, states=snapshot.states)
 
     if isinstance(snapshot.work_items, list) and snapshot.work_items:
         default_state = State.objects.filter(project_id=project.id, default=True).first()
