@@ -5,6 +5,32 @@
 from rest_framework import serializers
 
 from plane.extended.models import ProjectTemplate, Template
+from plane.utils.content_validator import validate_html_content
+
+
+def _sanitize_html_field(value: str | None) -> str | None:
+    if not value:
+        return value
+    is_valid, _error_msg, sanitized_html = validate_html_content(value)
+    if not is_valid:
+        raise serializers.ValidationError({"error": "html content is not valid"})
+    return sanitized_html if sanitized_html is not None else value
+
+
+def _sanitize_work_items(work_items):
+    if not isinstance(work_items, list):
+        return work_items
+
+    sanitized_items = []
+    for item in work_items:
+        if not isinstance(item, dict):
+            sanitized_items.append(item)
+            continue
+        next_item = dict(item)
+        if next_item.get("description_html"):
+            next_item["description_html"] = _sanitize_html_field(str(next_item["description_html"]))
+        sanitized_items.append(next_item)
+    return sanitized_items
 
 
 class TemplateSerializer(serializers.ModelSerializer):
@@ -33,6 +59,11 @@ class TemplateSerializer(serializers.ModelSerializer):
             "created_by",
             "updated_by",
         )
+
+    def validate(self, attrs):
+        if "description_html" in attrs and attrs["description_html"]:
+            attrs["description_html"] = _sanitize_html_field(str(attrs["description_html"]))
+        return attrs
 
 
 class ProjectTemplateSerializer(serializers.ModelSerializer):
@@ -84,6 +115,11 @@ class ProjectTemplateSerializer(serializers.ModelSerializer):
             "created_by",
             "updated_by",
         )
+
+    def validate(self, attrs):
+        if "work_items" in attrs:
+            attrs["work_items"] = _sanitize_work_items(attrs["work_items"])
+        return attrs
 
 
 class ProjectTemplateDataSerializer(TemplateSerializer):

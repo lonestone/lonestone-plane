@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Apply a Extended project template snapshot onto an existing project."""
+"""Apply a project template snapshot onto an existing project."""
 
 from __future__ import annotations
 
@@ -12,10 +12,17 @@ from django.db import transaction
 
 from plane.db.models import Issue, Label, Project, State
 from plane.extended.models import ProjectTemplate, Template
+from plane.utils.content_validator import validate_html_content
 
 
 def _random_color() -> str:
     return f"#{random.randint(0, 0xFFFFFF):06x}"
+
+
+def _sanitize_description_html(raw_html: str | None) -> str:
+    """Match issue create/update serializers: sanitize before persisting Issue HTML."""
+    _, _, sanitized_html = validate_html_content(raw_html or "<p></p>")
+    return sanitized_html if sanitized_html is not None else "<p></p>"
 
 
 @transaction.atomic
@@ -90,7 +97,7 @@ def apply_project_template(*, template_id: str, project_id: str, user_id: str | 
                 workspace_id=project.workspace_id,
                 project_id=project.id,
                 name=str(item["name"])[:255],
-                description_html=item.get("description_html") or "<p></p>",
+                description_html=_sanitize_description_html(item.get("description_html")),
                 state_id=default_state.id if default_state else None,
                 created_by_id=user_id,
                 updated_by_id=user_id,
