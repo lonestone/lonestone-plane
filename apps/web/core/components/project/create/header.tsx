@@ -18,6 +18,8 @@ import { getTabIndex } from "@plane/utils";
 // components
 import { CoverImage } from "@/components/common/cover-image";
 import { ImagePickerPopover } from "@/components/core/image-picker-popover";
+// Extended edition
+import { ProjectTemplateSelect } from "@/plane-web/components/projects/create/template-select";
 
 type Props = {
   handleClose: () => void;
@@ -26,10 +28,21 @@ type Props = {
   isClosable?: boolean;
   handleTemplateSelect?: () => void;
   showActionButtons?: boolean;
+  onTemplateSelect?: (templateId: string | null) => void;
+  selectedTemplateId?: string | null;
 };
 
 function ProjectCreateHeader(props: Props) {
-  const { handleClose, isMobile = false, handleFormOnChange, isClosable = true } = props;
+  const {
+    handleClose,
+    isMobile = false,
+    handleFormOnChange,
+    isClosable = true,
+    handleTemplateSelect,
+    showActionButtons = true,
+    onTemplateSelect,
+    selectedTemplateId,
+  } = props;
   const { watch, control, setValue } = useFormContext<IProject>();
   const { t } = useTranslation();
   // derived values
@@ -45,6 +58,15 @@ function ProjectCreateHeader(props: Props) {
         alt={t("project_cover_image_alt")}
         className="absolute top-0 left-0 h-full w-full rounded-lg"
       />
+      {showActionButtons && (
+        <div className="absolute top-2.5 left-2.5">
+          <ProjectTemplateSelect
+            onClick={handleTemplateSelect}
+            onSelect={onTemplateSelect}
+            selectedTemplateId={selectedTemplateId}
+          />
+        </div>
+      )}
       {isClosable && (
         <div className="absolute top-2 right-2 p-2">
           <button type="button" onClick={handleClose} tabIndex={getIndex("close")}>

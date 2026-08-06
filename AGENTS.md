@@ -11,6 +11,11 @@
 - `pnpm turbo run <command> --filter=<package>` - Target specific package/app
 - `pnpm --filter=@plane/ui storybook` - Start Storybook on port 6006
 
+## Fork extension conventions
+
+- **Backend**: All custom Django code goes in `apps/api/plane/extended/` (`plane.extended`). APIs under `/api/extended/`, DB tables `extended_*`. Do not add new top-level apps or fork migrations under `plane.db`. Details: `docs/architecture/fork-maintenance.md`.
+- **Frontend**: Edition UI/stores live in `apps/web/oe/` (`@/plane-web/*`). Fork-only routes in `apps/web/app/routes/extended.ts`.
+
 ## Code Style
 
 - **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps

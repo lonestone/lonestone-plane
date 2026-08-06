@@ -1,0 +1,28 @@
+# Local-dev proxy for Lonestone: API + MinIO only (web runs via pnpm on the host).
+# Used by docker-compose.lonestone.yml — do not put this under apps/proxy (upstream).
+
+(plane_proxy_local) {
+	request_body {
+		max_size {$FILE_SIZE_LIMIT}
+	}
+
+	reverse_proxy /api/* api:8000
+	reverse_proxy /auth/* api:8000
+	reverse_proxy /static/* api:8000
+
+	# Presigned MinIO uploads use the API host + /{BUCKET_NAME}
+	reverse_proxy /{$BUCKET_NAME}/* plane-minio:9000
+	reverse_proxy /{$BUCKET_NAME} plane-minio:9000
+}
+
+{
+	servers {
+		max_header_size 25MB
+		client_ip_headers X-Forwarded-For X-Real-IP
+		trusted_proxies static {$TRUSTED_PROXIES:0.0.0.0/0}
+	}
+}
+
+{$SITE_ADDRESS} {
+	import plane_proxy_local
+}
