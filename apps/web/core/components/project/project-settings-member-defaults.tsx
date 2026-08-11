@@ -4,10 +4,12 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable promise/always-return
 import type { ReactNode } from "react";
 import { useEffect } from "react";
 import { observer } from "mobx-react";
 import { Controller, useForm } from "react-hook-form";
+import { projectGuestCollaborationService } from "@plane/services";
 import useSWR from "swr";
 // plane imports
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
@@ -137,6 +139,25 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
       });
   };
 
+  const toggleGuestCollaborate = async (value: boolean) => {
+    if (!workspaceSlug || !projectId) return;
+
+    try {
+      await projectGuestCollaborationService.update(workspaceSlug, projectId, {
+        guest_can_collaborate: value,
+      });
+      // Refresh project details so guest_can_collaborate is on the project payload.
+      await fetchProjectDetails(workspaceSlug, projectId);
+      setToast({
+        title: `${t("success")}!`,
+        type: TOAST_TYPE.SUCCESS,
+        message: t("project_settings.general.toast.success"),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
   return (
     <div className="my-6 flex flex-col gap-y-6">
       <DefaultSettingItem title="Project Lead" description="Select the project lead for the project.">
@@ -190,6 +211,21 @@ export const ProjectSettingsMemberDefaults = observer(function ProjectSettingsMe
             <ToggleSwitch
               value={!!currentProjectDetails?.guest_view_all_features}
               onChange={() => toggleGuestViewAllIssues(!currentProjectDetails?.guest_view_all_features)}
+              disabled={!isAdmin}
+              size="sm"
+            />
+          </div>
+        </DefaultSettingItem>
+      )}
+      {currentProjectDetails && (
+        <DefaultSettingItem
+          title="Allow guests to collaborate"
+          description="Guests can create and edit work items and use Cycles and Modules in this project. Invite clients as workspace guests and enable “Guest access” so they can see the backlog."
+        >
+          <div className="flex items-center justify-end">
+            <ToggleSwitch
+              value={!!currentProjectDetails?.guest_can_collaborate}
+              onChange={() => toggleGuestCollaborate(!currentProjectDetails?.guest_can_collaborate)}
               disabled={!isAdmin}
               size="sm"
             />

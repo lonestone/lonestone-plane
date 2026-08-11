@@ -4,6 +4,7 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable no-shadow
 import React, { useCallback, useMemo } from "react";
 import { observer } from "mobx-react";
 import Link from "next/link";
@@ -57,6 +58,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     : undefined;
   const workItem = workItemId ? getIssueById(workItemId) : undefined;
   const project = getPartialProjectById(projectId);
+  const canGuestsCollaborate = !!project?.guest_can_collaborate;
   // handlers
   const handleProjectClick = () => {
     if (window.innerWidth < 768) {
@@ -86,7 +88,9 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Cycles",
         href: `/${workspaceSlug}/projects/${projectId}/cycles`,
         icon: CycleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        access: canGuestsCollaborate
+          ? [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST]
+          : [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: project?.cycle_view ?? false,
         sortOrder: 2,
       },
@@ -96,7 +100,9 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         name: "Modules",
         href: `/${workspaceSlug}/projects/${projectId}/modules`,
         icon: ModuleIcon,
-        access: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+        access: canGuestsCollaborate
+          ? [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST]
+          : [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
         shouldRender: project?.module_view ?? false,
         sortOrder: 3,
       },
@@ -131,7 +137,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
         sortOrder: 6,
       },
     ],
-    [project]
+    [project, canGuestsCollaborate]
   );
 
   // memoized navigation items and adding additional navigation items
@@ -147,7 +153,7 @@ export const ProjectNavigation = observer(function ProjectNavigation(props: TPro
     };
 
     // sort navigation items by sortOrder
-    const sortedNavigationItems = navigationItems(workspaceSlug, projectId).sort(
+    const sortedNavigationItems = navigationItems(workspaceSlug, projectId).toSorted(
       (a, b) => (a.sortOrder || 0) - (b.sortOrder || 0)
     );
 

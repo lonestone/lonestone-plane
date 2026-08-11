@@ -4,11 +4,14 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable no-shadow
+// oxlint-disable no-unused-expressions
+// oxlint-disable eslint-plugin-react-hooks/exhaustive-deps
 import React, { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ALL_ISSUES, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
 import type { EIssuesStoreType, IBlockUpdateData, TIssue } from "@plane/types";
@@ -20,7 +23,7 @@ import { GanttChartRoot } from "@/components/gantt-chart/root";
 import { IssueGanttSidebar } from "@/components/gantt-chart/sidebar/issues/sidebar";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 import { useTimeLineChart } from "@/hooks/use-timeline-chart";
@@ -54,7 +57,6 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
   const { fetchIssues, fetchNextIssues, updateIssue, quickAddIssue } = useIssuesActions(storeType);
   const { initGantt } = useTimeLineChart(GANTT_TIMELINE_TYPE.ISSUE);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
 
   const appliedDisplayFilters = issuesFilter.issueFilters?.displayFilters;
   // plane web hooks
@@ -89,7 +91,8 @@ export const BaseGanttRoot = observer(function BaseGanttRoot(props: IBaseGanttRo
     updateIssue && (await updateIssue(issue.project_id, issue.id, payload));
   };
 
-  const isAllowed = allowPermissions([EUserPermissions.ADMIN, EUserPermissions.MEMBER], EUserPermissionsLevel.PROJECT);
+  const { canEditProjectWorkItems } = useProjectCollaboration();
+  const isAllowed = canEditProjectWorkItems();
   const updateBlockDates = useCallback(
     (
       updates: {

@@ -6,9 +6,8 @@
 
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 // hooks
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 // local imports
 import { ProjectIssueQuickActions } from "../../quick-action-dropdowns";
 import { BaseListRoot } from "../base-list-root";
@@ -17,15 +16,10 @@ export const ProfileIssuesListLayout = observer(function ProfileIssuesListLayout
   // router
   const { workspaceSlug, profileViewId } = useParams();
   // store
-  const { allowPermissions } = useUserPermissions();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
 
   const canEditPropertiesBasedOnProject = (projectId: string) =>
-    allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      workspaceSlug.toString(),
-      projectId
-    );
+    canEditProjectWorkItems(workspaceSlug.toString(), projectId);
 
   return (
     <BaseListRoot

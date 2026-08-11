@@ -6,3 +6,4 @@
 
 export * from "./view.service";
 export * from "./sites-publish.service";
+export * from "./guest-collaboration.service";

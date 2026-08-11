@@ -7,7 +7,7 @@
 import React, { useCallback } from "react";
 import { observer } from "mobx-react";
 // plane constants
-import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EIssueFilterType } from "@plane/constants";
 import type { IIssueDisplayFilterOptions } from "@plane/types";
 import { EIssuesStoreType, EIssueLayoutTypes } from "@plane/types";
 // components
@@ -15,7 +15,7 @@ import { AllIssueQuickActions } from "@/components/issues/issue-layouts/quick-ac
 import { SpreadsheetLayoutLoader } from "@/components/ui/loader/layouts/spreadsheet-layout-loader";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 import { useWorkspaceIssueProperties } from "@/hooks/use-workspace-issue-properties";
 // store
@@ -49,7 +49,7 @@ export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRo
     issues: { getIssueLoader, getPaginationData, groupedIssueIds },
   } = useIssues(EIssuesStoreType.GLOBAL);
   const { updateIssue, removeIssue, archiveIssue } = useIssuesActions(EIssuesStoreType.GLOBAL);
-  const { allowPermissions } = useUserPermissions();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
 
   // Derived values
   const issueFilters = globalViewId ? filters?.[globalViewId.toString()] : undefined;
@@ -58,14 +58,9 @@ export const WorkspaceSpreadsheetRoot = observer(function WorkspaceSpreadsheetRo
   const canEditProperties = useCallback(
     (projectId: string | undefined) => {
       if (!projectId) return false;
-      return allowPermissions(
-        [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-        EUserPermissionsLevel.PROJECT,
-        workspaceSlug.toString(),
-        projectId
-      );
+      return canEditProjectWorkItems(workspaceSlug.toString(), projectId);
     },
-    [allowPermissions, workspaceSlug]
+    [canEditProjectWorkItems, workspaceSlug]
   );
 
   // Display filters handler

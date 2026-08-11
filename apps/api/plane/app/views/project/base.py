@@ -60,7 +60,13 @@ class ProjectViewSet(BaseViewSet):
             super()
             .get_queryset()
             .filter(workspace__slug=self.kwargs.get("slug"))
-            .select_related("workspace", "workspace__owner", "default_assignee", "project_lead")
+            .select_related(
+                "workspace",
+                "workspace__owner",
+                "default_assignee",
+                "project_lead",
+                "guest_collaboration",
+            )
             .annotate(
                 is_favorite=Exists(
                     UserFavorite.objects.filter(

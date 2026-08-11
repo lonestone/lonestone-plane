@@ -10,7 +10,7 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 import { Ellipsis } from "lucide-react";
 // plane imports
-import { ARCHIVABLE_STATE_GROUPS, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ARCHIVABLE_STATE_GROUPS } from "@plane/constants";
 import type { TIssue } from "@plane/types";
 import { EIssuesStoreType } from "@plane/types";
 import { ContextMenu, CustomMenu } from "@plane/ui";
@@ -19,7 +19,7 @@ import { cn } from "@plane/utils";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectState } from "@/hooks/store/use-project-state";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 // helper
 import { ArchiveIssueModal } from "../../archive-issue-modal";
 import { DeleteIssueModal } from "../../delete-issue-modal";
@@ -65,7 +65,6 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
   const [archiveIssueModal, setArchiveIssueModal] = useState(false);
   const [_, setDuplicateWorkItemModal] = useState(false);
   // store hooks
-  const { allowPermissions } = useUserPermissions();
   const { issuesFilter } = useIssues(EIssuesStoreType.PROJECT);
   const { getStateById } = useProjectState();
   const { getProjectIdentifierById } = useProject();
@@ -74,13 +73,9 @@ export const WorkItemDetailQuickActions = observer(function WorkItemDetailQuickA
   const stateDetails = getStateById(issue.state_id);
   const projectIdentifier = getProjectIdentifierById(issue?.project_id);
   // auth
+  const { canEditProjectWorkItems } = useProjectCollaboration();
   const isEditingAllowed =
-    allowPermissions(
-      [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-      EUserPermissionsLevel.PROJECT,
-      workspaceSlug?.toString(),
-      issue.project_id ?? undefined
-    ) && !readOnly;
+    canEditProjectWorkItems(workspaceSlug?.toString(), issue.project_id ?? undefined) && !readOnly;
 
   const isArchivingAllowed = !issue.archived_at && isEditingAllowed;
   const isInArchivableGroup = !!stateDetails && ARCHIVABLE_STATE_GROUPS.includes(stateDetails?.group);

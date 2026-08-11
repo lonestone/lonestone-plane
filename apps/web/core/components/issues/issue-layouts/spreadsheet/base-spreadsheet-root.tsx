@@ -4,17 +4,19 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable no-shadow
+// oxlint-disable eslint-plugin-react-hooks/exhaustive-deps
 import type { FC } from "react";
 import { useCallback, useEffect } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { ALL_ISSUES, EIssueFilterType, EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { ALL_ISSUES, EIssueFilterType } from "@plane/constants";
 import type { EIssuesStoreType, IIssueDisplayFilterOptions } from "@plane/types";
 import { EIssueLayoutTypes } from "@plane/types";
 // hooks
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
 // local imports
@@ -45,7 +47,6 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
   const { projectId } = useParams();
   // store hooks
   const storeType = useIssueStoreType() as SpreadsheetStoreType;
-  const { allowPermissions } = useUserPermissions();
   const { issues, issuesFilter } = useIssues(storeType);
   const {
     fetchIssues,
@@ -61,10 +62,8 @@ export const BaseSpreadsheetRoot = observer(function BaseSpreadsheetRoot(props: 
   // derived values
   const { enableInlineEditing, enableQuickAdd, enableIssueCreation } = issues?.viewFlags || {};
   // user role validation
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
+  const { canEditProjectWorkItems } = useProjectCollaboration();
+  const isEditingAllowed = canEditProjectWorkItems();
 
   useEffect(() => {
     fetchIssues("init-loader", { canGroup: false, perPageCount: 100 }, viewId);

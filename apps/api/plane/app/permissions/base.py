@@ -16,7 +16,7 @@ class ROLE(Enum):
     GUEST = 5
 
 
-def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
+def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None, allow_collaborating_guest=False):
     def decorator(view_func):
         @wraps(view_func)
         def _wrapped_view(instance, request, *args, **kwargs):
@@ -76,6 +76,12 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
                     ).exists()
                 ):
                     return view_func(instance, request, *args, **kwargs)
+                elif allow_collaborating_guest and _is_collaborating_guest(
+                    user=request.user,
+                    slug=kwargs["slug"],
+                    project_id=kwargs["project_id"],
+                ):
+                    return view_func(instance, request, *args, **kwargs)
 
             # Return permission denied if no conditions are met
             return Response(
@@ -86,3 +92,20 @@ def allow_permission(allowed_roles, level="PROJECT", creator=False, model=None):
         return _wrapped_view
 
     return decorator
+
+
+def _is_collaborating_guest(*, user, slug: str, project_id) -> bool:
+    """True when the user is an active project guest and the project flag is on."""
+    if not ProjectMember.objects.filter(
+        member=user,
+        workspace__slug=slug,
+        project_id=project_id,
+        role=ROLE.GUEST.value,
+        is_active=True,
+    ).exists():
+        return False
+
+    # Lazy import avoids circular imports with extended models during app load.
+    from plane.extended.services.guest_collaboration import guest_can_collaborate
+
+    return guest_can_collaborate(project_id)

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from .guest_collaboration import ProjectGuestCollaborationEndpoint
 from .project_template import (
     ProjectTemplateApplyEndpoint,
     ProjectTemplateEndpoint,
@@ -12,4 +13,5 @@ __all__ = (
     "ProjectTemplateEndpoint",
     "ProjectTemplateApplyEndpoint",
     "ProjectTemplatePreviewEndpoint",
+    "ProjectGuestCollaborationEndpoint",
 )

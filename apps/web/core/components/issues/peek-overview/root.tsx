@@ -4,12 +4,12 @@
  * See the LICENSE file for details.
  */
 
+// oxlint-disable no-shadow
 import { useState, useMemo, useCallback } from "react";
 import { observer } from "mobx-react";
 import { usePathname } from "next/navigation";
 // Plane imports
 import useSWR from "swr";
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { TOAST_TYPE, setPromiseToast, setToast } from "@plane/propel/toast";
 import type { IWorkItemPeekOverview, TIssue } from "@plane/types";
@@ -17,7 +17,7 @@ import { EIssueServiceType, EIssuesStoreType } from "@plane/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useWorkItemProperties } from "@/hooks/use-issue-properties";
 // local imports
@@ -35,7 +35,7 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
   // router
   const pathname = usePathname();
   // store hook
-  const { allowPermissions } = useUserPermissions();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
 
   const {
     issues: { restoreIssue },
@@ -227,13 +227,8 @@ export const IssuePeekOverview = observer(function IssuePeekOverview(props: IWor
 
   if (!peekIssue?.workspaceSlug || !peekIssue?.projectId || !peekIssue?.issueId) return <></>;
 
-  // Check if issue is editable, based on user role
-  const isEditable = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT,
-    peekIssue?.workspaceSlug,
-    peekIssue?.projectId
-  );
+  // Check if issue is editable, based on user role / guest collaboration
+  const isEditable = canEditProjectWorkItems(peekIssue?.workspaceSlug, peekIssue?.projectId);
 
   return (
     <IssueView

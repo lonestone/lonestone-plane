@@ -106,7 +106,7 @@ class CycleIssueViewSet(BaseViewSet):
         )
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     def list(self, request, slug, project_id, cycle_id):
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = (
@@ -220,7 +220,7 @@ class CycleIssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     def create(self, request, slug, project_id, cycle_id):
         issues = request.data.get("issues", [])
 
@@ -316,7 +316,7 @@ class CycleIssueViewSet(BaseViewSet):
         )
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     def destroy(self, request, slug, project_id, cycle_id, issue_id):
         cycle_issue = CycleIssue.objects.filter(
             issue_id=issue_id,
