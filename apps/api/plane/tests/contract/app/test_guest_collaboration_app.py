@@ -13,6 +13,8 @@ from rest_framework.test import APIClient
 from plane.db.models import (
     Cycle,
     Issue,
+    Module,
+    ModuleIssue,
     Project,
     ProjectMember,
     State,
@@ -23,6 +25,7 @@ from plane.extended.models import ProjectGuestCollaboration
 
 ISSUES_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/"
 ISSUE_DETAIL_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/{pk}/"
+ISSUE_MODULES_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/{issue_id}/modules/"
 CYCLES_URL = "/api/workspaces/{slug}/projects/{project_id}/cycles/"
 CYCLE_DETAIL_URL = "/api/workspaces/{slug}/projects/{project_id}/cycles/{pk}/"
 GUEST_COLLAB_URL = "/api/extended/workspaces/{slug}/projects/{project_id}/guest-collaboration/"
@@ -64,6 +67,16 @@ def other_project(db, workspace, create_user):
         guest_view_all_features=True,
     )
     ProjectMember.objects.create(project=project, member=create_user, workspace=workspace, role=20)
+    State.objects.create(
+        name="Backlog",
+        color="#000000",
+        project=project,
+        workspace=workspace,
+        sequence=1,
+        group="backlog",
+        default=True,
+        created_by=create_user,
+    )
     return project
 
 
@@ -181,6 +194,55 @@ class TestGuestCollaboration:
         response = session_client.get(url)
         assert response.status_code == status.HTTP_200_OK
         assert response.data.get("guest_can_collaborate") is True
+
+    @pytest.mark.django_db
+    def test_guest_cannot_attach_issues_to_foreign_project_module(
+        self, guest_client, workspace, project, other_project, create_user, foreign_issue
+    ):
+        """Guests must not bind issues using another project's module_id."""
+        ProjectGuestCollaboration.objects.create(project=project, guest_can_collaborate=True)
+
+        foreign_module = Module.objects.create(
+            name="Other Module",
+            project=other_project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+
+        url = (
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/"
+            f"modules/{foreign_module.id}/issues/"
+        )
+        response = guest_client.post(url, {"issues": [str(foreign_issue.id)]}, format="json")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert not ModuleIssue.objects.filter(
+            issue_id=foreign_issue.id, module_id=foreign_module.id
+        ).exists()
+
+    @pytest.mark.django_db
+    def test_guest_cannot_attach_modules_to_foreign_project_issue(
+        self, guest_client, workspace, project, other_project, create_user
+    ):
+        """Guests must not bind modules using another project's issue_id."""
+        ProjectGuestCollaboration.objects.create(project=project, guest_can_collaborate=True)
+
+        module = Module.objects.create(
+            name="Client Module",
+            project=project,
+            workspace=workspace,
+            created_by=create_user,
+        )
+        foreign_issue = Issue(name="Other project issue", project=other_project, workspace=workspace)
+        foreign_issue.save(created_by_id=create_user.id)
+
+        url = ISSUE_MODULES_URL.format(
+            slug=workspace.slug,
+            project_id=project.id,
+            issue_id=foreign_issue.id,
+        )
+        response = guest_client.post(url, {"modules": [str(module.id)]}, format="json")
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert not ModuleIssue.objects.filter(issue_id=foreign_issue.id, module_id=module.id).exists()
 
     @pytest.mark.django_db
     def test_admin_can_toggle_guest_collaboration(self, session_client, workspace, project):
