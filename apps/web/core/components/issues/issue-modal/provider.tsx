@@ -11,7 +11,8 @@ import type { ISearchIssueResponse, TIssue } from "@plane/types";
 // components
 import { IssueModalContext } from "@/components/issues/issue-modal/context";
 // hooks
-import { useUser } from "@/hooks/store/user/user-user";
+import { useProject } from "@/hooks/store/use-project";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 
 export type TIssueModalProviderProps = {
   templateId?: string;
@@ -25,9 +26,12 @@ export const IssueModalProvider = observer(function IssueModalProvider(props: TI
   // states
   const [selectedParentIssue, setSelectedParentIssue] = useState<ISearchIssueResponse | null>(null);
   // store hooks
-  const { projectsWithCreatePermissions } = useUser();
-  // derived values
-  const projectIdsWithCreatePermissions = Object.keys(projectsWithCreatePermissions ?? {});
+  const { joinedProjectIds } = useProject();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
+  // Include collaborating guests — projectsWithCreatePermissions only covers member+.
+  const projectIdsWithCreatePermissions = joinedProjectIds.filter((projectId) =>
+    canEditProjectWorkItems(undefined, projectId)
+  );
 
   return (
     <IssueModalContext.Provider
