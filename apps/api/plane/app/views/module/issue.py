@@ -24,6 +24,7 @@ from plane.db.models import (
     Issue,
     FileAsset,
     IssueLink,
+    Module,
     ModuleIssue,
     Project,
     CycleIssue,
@@ -92,7 +93,7 @@ class ModuleIssueViewSet(BaseViewSet):
         ).distinct()
 
     @method_decorator(gzip_page)
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     def list(self, request, slug, project_id, module_id):
         filters = issue_filters(request.query_params, "GET")
         issue_queryset = self.get_queryset()
@@ -206,13 +207,21 @@ class ModuleIssueViewSet(BaseViewSet):
                 on_results=lambda issues: issue_on_results(group_by=group_by, issues=issues, sub_group_by=sub_group_by),
             )
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     # create multiple issues inside a module
     def create_module_issues(self, request, slug, project_id, module_id):
         issues = request.data.get("issues", [])
         if not issues:
             return Response({"error": "Issues are required"}, status=status.HTTP_400_BAD_REQUEST)
-        project = Project.objects.get(pk=project_id)
+        # Scope module to workspace+project to prevent cross-project IDOR
+        module = Module.objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            pk=module_id,
+            archived_at__isnull=True,
+        ).first()
+        if not module:
+            return Response({"error": "Module not found"}, status=status.HTTP_404_NOT_FOUND)
         # Scope to workspace+project to prevent cross-tenant IDOR
         issues = list(
             Issue.issue_objects.filter(
@@ -225,9 +234,9 @@ class ModuleIssueViewSet(BaseViewSet):
             [
                 ModuleIssue(
                     issue_id=str(issue),
-                    module_id=module_id,
+                    module_id=module.id,
                     project_id=project_id,
-                    workspace_id=project.workspace_id,
+                    workspace_id=module.workspace_id,
                     created_by=request.user,
                     updated_by=request.user,
                 )
@@ -253,14 +262,31 @@ class ModuleIssueViewSet(BaseViewSet):
         ]
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     # add multiple module inside an issue and remove multiple modules from an issue
     def create_issue_modules(self, request, slug, project_id, issue_id):
         modules = request.data.get("modules", [])
         removed_modules = request.data.get("removed_modules", [])
         project = Project.objects.get(pk=project_id)
 
+        # Scope issue to workspace+project to prevent cross-project IDOR
+        if not Issue.issue_objects.filter(
+            workspace__slug=slug,
+            project_id=project_id,
+            pk=issue_id,
+        ).exists():
+            return Response({"error": "Issue not found"}, status=status.HTTP_404_NOT_FOUND)
+
         if modules:
+            # Scope modules to workspace+project to prevent cross-project IDOR
+            modules = list(
+                Module.objects.filter(
+                    workspace__slug=slug,
+                    project_id=project_id,
+                    pk__in=modules,
+                    archived_at__isnull=True,
+                ).values_list("id", flat=True)
+            )
             _ = ModuleIssue.objects.bulk_create(
                 [
                     ModuleIssue(
@@ -280,7 +306,7 @@ class ModuleIssueViewSet(BaseViewSet):
             _ = [
                 issue_activity.delay(
                     type="module.activity.created",
-                    requested_data=json.dumps({"module_id": module}),
+                    requested_data=json.dumps({"module_id": str(module)}),
                     actor_id=str(request.user.id),
                     issue_id=issue_id,
                     project_id=project_id,
@@ -322,7 +348,7 @@ class ModuleIssueViewSet(BaseViewSet):
 
         return Response({"message": "success"}, status=status.HTTP_201_CREATED)
 
-    @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
+    @allow_permission([ROLE.ADMIN, ROLE.MEMBER], allow_collaborating_guest=True)
     def destroy(self, request, slug, project_id, module_id, issue_id):
         module_issue = ModuleIssue.objects.filter(
             workspace__slug=slug,

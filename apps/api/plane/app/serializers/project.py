@@ -121,6 +121,7 @@ class ProjectListSerializer(DynamicBaseSerializer):
     cover_image_url = serializers.CharField(read_only=True)
     inbox_view = serializers.BooleanField(read_only=True, source="intake_view")
     next_work_item_sequence = serializers.SerializerMethodField()
+    guest_can_collaborate = serializers.SerializerMethodField()
 
     def get_members(self, obj):
         project_members = getattr(obj, "members_list", None)
@@ -133,6 +134,17 @@ class ProjectListSerializer(DynamicBaseSerializer):
         """Get the next sequence ID that will be assigned to a new issue"""
         max_sequence = IssueSequence.objects.filter(project_id=obj.id).aggregate(max_seq=Max("sequence"))["max_seq"]
         return (max_sequence + 1) if max_sequence else 1
+
+    def get_guest_can_collaborate(self, obj):
+        from django.core.exceptions import ObjectDoesNotExist
+
+        try:
+            collab = obj.guest_collaboration
+        except ObjectDoesNotExist:
+            return False
+        if collab is not None and getattr(collab, "deleted_at", None) is None:
+            return bool(collab.guest_can_collaborate)
+        return False
 
     class Meta:
         model = Project
@@ -147,6 +159,18 @@ class ProjectDetailSerializer(BaseSerializer):
     sort_order = serializers.FloatField(read_only=True)
     member_role = serializers.IntegerField(read_only=True)
     anchor = serializers.CharField(read_only=True)
+    guest_can_collaborate = serializers.SerializerMethodField()
+
+    def get_guest_can_collaborate(self, obj):
+        from django.core.exceptions import ObjectDoesNotExist
+
+        try:
+            collab = obj.guest_collaboration
+        except ObjectDoesNotExist:
+            return False
+        if collab is not None and getattr(collab, "deleted_at", None) is None:
+            return bool(collab.guest_can_collaborate)
+        return False
 
     class Meta:
         model = Project

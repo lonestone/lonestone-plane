@@ -7,6 +7,7 @@
 from django.urls import path
 
 from plane.extended.views import (
+    ProjectGuestCollaborationEndpoint,
     ProjectTemplateApplyEndpoint,
     ProjectTemplateEndpoint,
     ProjectTemplatePreviewEndpoint,
@@ -32,5 +33,10 @@ urlpatterns = [
         "workspaces/<str:slug>/project-templates/<uuid:pk>/apply/",
         ProjectTemplateApplyEndpoint.as_view(),
         name="extended-project-template-apply",
+    ),
+    path(
+        "workspaces/<str:slug>/projects/<uuid:project_id>/guest-collaboration/",
+        ProjectGuestCollaborationEndpoint.as_view(),
+        name="extended-project-guest-collaboration",
     ),
 ]

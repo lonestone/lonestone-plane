@@ -8,12 +8,11 @@ import React, { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { EIssuesStoreType } from "@plane/types";
 // hooks
 import { useCycle } from "@/hooks/store/use-cycle";
 import { useIssues } from "@/hooks/store/use-issues";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 // types
 import { CycleIssueQuickActions } from "../../quick-action-dropdowns";
 import { BaseListRoot } from "../base-list-root";
@@ -22,19 +21,16 @@ export const CycleListLayout = observer(function CycleListLayout() {
   const { workspaceSlug, projectId, cycleId } = useParams();
   // store
   const { issues } = useIssues(EIssuesStoreType.CYCLE);
-  const { currentProjectCompletedCycleIds } = useCycle(); // mobx store
-  const { allowPermissions } = useUserPermissions();
+  const { currentProjectCompletedCycleIds } = useCycle();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
 
   const isCompletedCycle =
     cycleId && currentProjectCompletedCycleIds ? currentProjectCompletedCycleIds.includes(cycleId.toString()) : false;
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   const canEditIssueProperties = useCallback(
-    () => !isCompletedCycle && isEditingAllowed,
-    [isCompletedCycle, isEditingAllowed]
+    (issueProjectId?: string) =>
+      !isCompletedCycle && canEditProjectWorkItems(workspaceSlug?.toString(), issueProjectId ?? projectId?.toString()),
+    [canEditProjectWorkItems, isCompletedCycle, projectId, workspaceSlug]
   );
 
   const addIssuesToView = useCallback(
@@ -42,7 +38,7 @@ export const CycleListLayout = observer(function CycleListLayout() {
       if (!workspaceSlug || !projectId || !cycleId) throw new Error();
       return issues.addIssueToCycle(workspaceSlug.toString(), projectId.toString(), cycleId.toString(), issueIds);
     },
-    [issues?.addIssueToCycle, workspaceSlug, projectId, cycleId]
+    [issues, workspaceSlug, projectId, cycleId]
   );
 
   return (

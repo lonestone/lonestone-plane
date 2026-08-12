@@ -8,30 +8,26 @@ import React, { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // hooks
-import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useCycle } from "@/hooks/store/use-cycle";
-import { useUserPermissions } from "@/hooks/store/user";
+import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 // components
 import { CycleIssueQuickActions } from "../../quick-action-dropdowns";
 import { BaseSpreadsheetRoot } from "../base-spreadsheet-root";
 
 export const CycleSpreadsheetLayout = observer(function CycleSpreadsheetLayout() {
   // router
-  const { cycleId } = useParams();
+  const { workspaceSlug, projectId, cycleId } = useParams();
   // store hooks
   const { currentProjectCompletedCycleIds } = useCycle();
-  const { allowPermissions } = useUserPermissions();
+  const { canEditProjectWorkItems } = useProjectCollaboration();
   // auth
   const isCompletedCycle =
     cycleId && currentProjectCompletedCycleIds ? currentProjectCompletedCycleIds.includes(cycleId.toString()) : false;
-  const isEditingAllowed = allowPermissions(
-    [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
-    EUserPermissionsLevel.PROJECT
-  );
 
   const canEditIssueProperties = useCallback(
-    () => !isCompletedCycle && isEditingAllowed,
-    [isCompletedCycle, isEditingAllowed]
+    (issueProjectId?: string) =>
+      !isCompletedCycle && canEditProjectWorkItems(workspaceSlug?.toString(), issueProjectId ?? projectId?.toString()),
+    [canEditProjectWorkItems, isCompletedCycle, projectId, workspaceSlug]
   );
 
   if (!cycleId) return null;

@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from .guest_collaboration import ProjectGuestCollaborationSerializer
 from .project_template import (
     ProjectTemplateDataSerializer,
     ProjectTemplateSerializer,
@@ -12,4 +13,5 @@ __all__ = (
     "TemplateSerializer",
     "ProjectTemplateSerializer",
     "ProjectTemplateDataSerializer",
+    "ProjectGuestCollaborationSerializer",
 )
