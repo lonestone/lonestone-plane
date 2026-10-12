@@ -239,6 +239,50 @@ New routes go in `plane/extended/urls.py`. The only upstream-touching lines for 
 
 **New fields on existing models** — this is the danger zone (see below); prefer companion models in `plane.extended` with `extended_*` tables.
 
+### Keeping upstream changes minimal
+
+The tiers above say where code should go. This section is about the cases where a feature cannot avoid upstream code (`core/`, `ce/`, `packages/`, `plane.*` outside `plane.extended`), and how to keep that part as small as possible. The examples come from the bulk edit feature (LONESTONEP-5), which went from 19 changed upstream files to 7.
+
+#### Principle: adapt the fork to upstream, not the other way round
+
+When a feature would require changing upstream signatures, shrink the feature rather than the upstream code. Bulk edit first reported a result per work item ("48 updated, 2 skipped"). The upstream store returns `Promise<void>` from eight interfaces, so this meant changing nine core files. The API was made all or nothing instead, which fits the upstream store as it is. The dropped design is kept in the docs, in case the trade-off is worth weighing again.
+
+#### When upstream code must change
+
+1. **Swap only the paid placeholder, keep upstream logic.** `core/components/issues/bulk-operations/root.tsx` renders the fork bar instead of the "Upgrade" banner. Its display rule and every call site stay upstream's.
+2. **Re-export from `oe/`.** `core/hooks/use-bulk-operation-status.ts` is one line that re-exports the fork hook; the logic lives in `oe/hooks/`.
+3. **Change the value, not the signature.** The issue service only got a new URL; its upstream return type was kept.
+4. **One line per file when possible.** Board selection is wired with one import and one rendered component in each of two kanban files.
+5. **Translations: append, never edit.** New keys go at the end of the existing namespace; upstream keys stay untouched.
+
+#### How to avoid changing upstream code
+
+6. **Reuse public upstream methods from `oe/`.** Bulk edit updates the store through `updateIssue(..., shouldSync = false)` (upstream's local update, which also regroups work items), `removeIssueFromList`, `fetchCycleDetails`, `fetchModuleDetails` and `IssueService.retrieveIssues`, with no store change.
+7. **Prefer optimistic updates over refetching the view.** Update the store first, the way upstream does in `issueUpdate`, then call the API and revert the change if it fails. Read the saved data back in the background if the server may compute more. Bulk edit keeps the open menu, the scroll position and the loaded pages this way, where a refetch of the view would clear the list. Keep the update all or nothing on the API side so that the revert is exact.
+8. **Check what an upstream method does on screen before relying on it.** `fetchIssuesWithExistingPagination` clears the list before refetching: the loader replaces the list, open menus close and the pagination resets. The e2e tests caught it.
+9. **Keep fork-only types in `oe/`.** Widening the shared `TBulkOperationsPayload` in `packages/types` broke upstream code that indexes work items with its keys (TS7053). The removal keys now live in `oe/components/issues/bulk-operations/types.ts`.
+10. **Copy a rendering into `oe/` rather than exporting or editing a core component**, and note what to re-check when upstream restyles it (`oe/components/issues/bulk-operations/dropdown-options.tsx`).
+11. **Isolate an unavoidable workaround in `oe/` and explain it.** The store interfaces leave out `shouldSync`, so `oe/` calls `updateIssue` through a typed cast (`TLocalIssueUpdate`) whose comment says what to re-check on upstream merges.
+12. **Backend: everything in `plane.extended`**, routes under `/api/extended/`, no migration under `plane.db` (see the section above).
+
+#### Keeping the pull request clean
+
+13. **No formatting or lint-only changes in upstream files.** Restore any upstream file whose only change is a comment, a reformat or a reordered import.
+14. **Move unrelated fixes to their own branch**, even small ones found along the way.
+15. **Measure the footprint at each step**: `git diff --stat origin/preview -- apps/web/core apps/web/ce packages`.
+16. **List every changed upstream file in `FORK_CHANGELOG.md`** ("Upstream files touched"), under its feature, in the same commit, and the upstream code the fork copies or relies on in "Upstream dependencies". The pre-commit hook enforces it (`tools/check-fork-changelog.mjs --staged`), and `node tools/check-fork-changelog.mjs` audits the whole fork against `upstream/preview`. A file missing from the changelog will not be checked on the next upstream merge.
+17. **Document what was dropped and why**, so that a later change can bring it back knowingly.
+18. **Record features Plane does not offer** in `FORK_CHANGELOG.md` ("Features not in Plane"). The project builds only features that Plane offers; an exception is documented as part of the feature.
+
+#### Checklist before opening a pull request
+
+- [ ] Every upstream file in the diff is required; every upstream file is listed in `FORK_CHANGELOG.md`, and every copy or use of upstream internals in its "Upstream dependencies" (`node tools/check-fork-changelog.mjs` passes).
+- [ ] No upstream signature, shared type or translation key was changed.
+- [ ] No formatting, lint-only or unrelated change in upstream files.
+- [ ] The store is updated optimistically (and reverted on error) rather than by refetching the view.
+- [ ] Workarounds that depend on upstream internals are commented with what to re-check.
+- [ ] Tests cover the feature (backend unit and contract tests under `plane/tests/`).
+
 ---
 
 ## The Hard Problems
