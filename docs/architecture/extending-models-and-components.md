@@ -407,9 +407,24 @@ The pre-commit hook runs `oxlint --deny-warnings` on every committed file, so to
 
 **Bulk edit of work item properties (LONESTONEP-5)**
 
-| Core file                                 | Change                                                                                 | Why                                                                     |
-| ----------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `core/hooks/use-bulk-operation-status.ts` | Re-exports `useBulkOperationStatus` from `@/plane-web/hooks/use-bulk-operation-status` | Upstream hard-codes `() => false`, which hides the selection checkboxes |
+| Core file                                          | Change                                                                                                                                                      | Why                                                                                                                                   |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `core/hooks/use-bulk-operation-status.ts`          | Re-exports `useBulkOperationStatus` from `@/plane-web/hooks/use-bulk-operation-status`                                                                      | Upstream hard-codes `() => false`, which hides the selection checkboxes                                                               |
+| `core/components/issues/bulk-operations/root.tsx`  | Renders `BulkOperationsBar` from `@/plane-web/components/issues/bulk-operations` instead of `BulkOperationsUpgradeBanner`                                   | Keeps upstream's display rule (active, enabled selection) and its call sites in every layout; only the paid-edition banner is swapped |
+| `core/services/issue/issue.service.ts`             | `bulkOperations` posts to `/api/extended/.../issues/bulk-update/` (URL only)                                                                                | The upstream endpoint only exists in the paid edition                                                                                 |
+| `packages/i18n/src/locales/{en,fr}/work-item.json` | Adds keys at the end of `bulk_operations` (`selected_count`, `clear_selection`, `clear_*_date`, `toast.*`, `failure_reasons.*`); no upstream key is changed | The fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours                        |
+
+The bar itself lives in `oe/components/issues/bulk-operations/`. The assignee, label and module menus copy the option rendering of the upstream dropdowns in `oe/components/issues/bulk-operations/dropdown-options.tsx` instead of importing it from `core/`; re-check it when upstream restyles those dropdowns. The backend lives in `plane.extended` (`issue_bulk_update` view, serializer and service).
+
+The API is all or nothing, to fit the upstream store: if one work item cannot take the change, it answers `400 {"error", "code"}` and writes nothing. The codes the bar translates are `not_found` (a work item was deleted, archived or moved) and `invalid_date_range` (the start date would end up after the due date). The bar sends batches of 500 work items, the API limit; if a later batch fails, the toast reports how many were saved before it.
+
+The issue stores are not modified. The bar updates the store optimistically from `oe/components/issues/bulk-operations/use-bulk-update.ts`:
+
+1. For each selected work item it computes the new values (additions merged, `remove_*` values filtered out, other properties replaced) and applies them with the store's `updateIssue(..., shouldSync = false)`. That is upstream's `issueUpdate` in local mode, the one it uses for its own local changes: it updates the work item and moves it between groups (`updateIssueList`) without calling the API. The store interfaces leave `shouldSync` out, so the hook calls it through a typed cast (`TLocalIssueUpdate`); re-check it if upstream changes `issueUpdate`.
+2. It sends the batch with `IssueService.bulkOperations`. If the API rejects it, the previous values are put back the same way.
+3. Once saved: in a module's view, work items taken out of that module leave the list (`removeIssueFromList`); in a cycle or module view, the progress stats are fetched again (`fetchCycleDetails` or `fetchModuleDetails`, plus `fetchActiveCycleProgressPro` for v2 cycles); in the background, the work items are read back (`IssueService.retrieveIssues`, 100 per request) and whatever differs from the store is applied.
+
+The view is never refetched: `fetchIssuesWithExistingPagination` clears the list first, which shows the loader, closes the open menu and resets the pagination. The removal keys are typed in `oe/components/issues/bulk-operations/types.ts`, not in the shared `TBulkOperationsPayload`, whose keys the upstream `bulkUpdateProperties` uses to index work items.
 
 ---
 
