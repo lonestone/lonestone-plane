@@ -426,6 +426,17 @@ The issue stores are not modified. The bar updates the store optimistically from
 
 The view is never refetched: `fetchIssuesWithExistingPagination` clears the list first, which shows the loader, closes the open menu and resets the pagination. The removal keys are typed in `oe/components/issues/bulk-operations/types.ts`, not in the shared `TBulkOperationsPayload`, whose keys the upstream `bulkUpdateProperties` uses to index work items.
 
+**Dropped: per-work-item partial success**
+
+A first version reported a result per work item, so that one bad work item did not block the others ("48 updated, 2 skipped: start date after due date"). It was removed because it did not fit the fork's constraint of staying as close as possible to upstream: it changed upstream signatures in nine `core/` files for a feature upstream does not have. Do not bring it back without weighing that cost again. How it worked, in case it is needed:
+
+- API: `200` with `{"updated_issue_ids", "unchanged_issue_ids", "failed": [{"issue_id", "code"}]}`. A work item not found or with an invalid date range went to `failed` instead of rejecting the request; the others were still written.
+- Types: `TBulkOperationsFailureCode` and `TBulkOperationsResponse` in `packages/types/src/issues/issue.ts`.
+- Service: `bulkOperations` returned `Promise<TBulkOperationsResponse>` instead of `Promise<any>`.
+- Base store: `bulkUpdateProperties` returned the response and applied the change to `response.updated_issue_ids` only, not to every sent id (upstream assumes they all succeed). It also handled the `remove_*` keys, took work items out of the current module's list and refreshed the cycle or module stats; that part now lives in the bar (optimistic update through upstream's local `issueUpdate`).
+- The eight `core/store/issue/*/issue.store.ts` files: each interface (`IProjectIssues`, `ICycleIssues`, …) declares its own `bulkUpdateProperties` with `Promise<void>`. They all had to return `Promise<TBulkOperationsResponse>`, otherwise the bar, which reads the union of the stores, cannot access the response. TypeScript does not accept a `Promise<Response>` implementation behind a `Promise<void>` interface, so there is no way around these files without lying casts.
+- Bar: merged the responses of the batches and showed a warning toast with one counted reason per failure code (`failure_reasons.*` used ICU plurals).
+
 ---
 
 ### Summary table
