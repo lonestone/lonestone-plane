@@ -397,6 +397,22 @@ Add integration tests for your custom components that assert the expected props 
 
 ---
 
+### Core files touched by fork features
+
+Some fork features need a few lines in `core/` because upstream offers no `@/plane-web` hook at that point. Re-check these after every `upstream/preview` merge.
+
+Any change to a file in `apps/web/core/` or `packages/` goes into this table, with its reason, in the same commit. A file missing from it will not be checked on the next upstream merge.
+
+The pre-commit hook runs `oxlint --deny-warnings` on every committed file, so touching a `core/` file also surfaces its existing upstream warnings. Silence them with an `oxlint-disable-next-line <rule> -- upstream code, …` comment rather than fixing them: a fix rewrites upstream lines and turns the next merge of that code into a conflict.
+
+**Bulk edit of work item properties (LONESTONEP-5)**
+
+| Core file                                 | Change                                                                                 | Why                                                                     |
+| ----------------------------------------- | -------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `core/hooks/use-bulk-operation-status.ts` | Re-exports `useBulkOperationStatus` from `@/plane-web/hooks/use-bulk-operation-status` | Upstream hard-codes `() => false`, which hides the selection checkboxes |
+
+---
+
 ### Summary table
 
 | What you want to do                   | Where to write code                                                     | Upstream file touched?   |
