@@ -31,6 +31,7 @@ import { useKanbanView } from "@/hooks/store/use-kanban-view";
 import { useProject } from "@/hooks/store/use-project";
 import useIssuePeekOverviewRedirection from "@/hooks/use-issue-peek-overview-redirection";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { BoardCardSelection } from "@/plane-web/components/issues/board-selection";
 // local components
 import type { TRenderQuickActions } from "../list/list-view-types";
 import { IssueProperties } from "../properties/all-properties";
@@ -289,6 +290,7 @@ export const KanbanIssueBlock = observer(function KanbanIssueBlock(props: IssueB
             />
           </RenderIfVisible>
         </ControlLink>
+        <BoardCardSelection issueId={issueId} groupId={groupId} subGroupId={subGroupId} />
       </div>
     </>
   );

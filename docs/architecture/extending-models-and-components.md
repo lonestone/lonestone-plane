@@ -437,6 +437,15 @@ A first version reported a result per work item, so that one bad work item did n
 - The eight `core/store/issue/*/issue.store.ts` files: each interface (`IProjectIssues`, `ICycleIssues`, …) declares its own `bulkUpdateProperties` with `Promise<void>`. They all had to return `Promise<TBulkOperationsResponse>`, otherwise the bar, which reads the union of the stores, cannot access the response. TypeScript does not accept a `Promise<Response>` implementation behind a `Promise<void>` interface, so there is no way around these files without lying casts.
 - Bar: merged the responses of the batches and showed a warning toast with one counted reason per failure code (`failure_reasons.*` used ICU plurals).
 
+**Board multi-select (LONESTONEP-5, spec 002)**
+
+| Core file                                                          | Change                                                                                                                                    | Why                                                                                 |
+| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `core/components/issues/issue-layouts/kanban/base-kanban-root.tsx` | Renders `BoardSelection` from `@/plane-web/components/issues/board-selection` next to the board's scroll container (one import, one line) | The board has no selection upstream and no `@/plane-web` extension point            |
+| `core/components/issues/issue-layouts/kanban/block.tsx`            | Renders `BoardCardSelection` inside the card wrapper (one import, one line)                                                               | Card checkbox, selected border and touch selection; the card itself is not modified |
+
+New fork code: `oe/components/issues/board-selection/`. `BoardSelection` builds the selection groups, renders the bulk bar over the bottom of the board and publishes the selection helpers in a MobX box (`helpers-store.ts`), since it is a sibling of the board rather than a wrapper. `BoardCardSelection` reads them and wires touch selection on the card wrapper with native listeners. It only uses the upstream selection helpers (`handleEntityClick`). There is no column "select all" checkbox: upstream has no extension point in the column header, and Plane only offers bulk operations in the list and spreadsheet layouts.
+
 ---
 
 ### Summary table
