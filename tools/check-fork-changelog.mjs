@@ -28,7 +28,7 @@ const FORK_OWNED = [
   "tools/",
   "deployments/lonestone/",
   "docker-compose.lonestone.yml",
-  ".claude/hooks/",
+  ".claude/skills/start-feature/",
   ".claude/skills/plane-feature-check/",
   CHANGELOG,
 ];

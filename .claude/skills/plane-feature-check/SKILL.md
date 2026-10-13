@@ -1,6 +1,6 @@
 ---
 name: plane-feature-check
-description: Run FIRST, before any spec, plan or code, whenever a new feature, specification, user story, epic or product change is requested (EN or FR — "feature", "fonctionnalité", "spec", "spécification", "implement", "ajouter la possibilité de…"). Checks whether the feature exists in Plane (Community Edition or a paid plan), reports where to plug it in, and explains that the project does not build features Plane does not offer.
+description: Step 1 of the start-feature skill; also usable alone. Run FIRST, before any spec, plan or code, whenever a new feature, specification, user story, epic or product change is requested (EN or FR — "feature", "fonctionnalité", "spec", "spécification", "implement", "ajouter la possibilité de…"). Checks whether the feature exists in Plane (Community Edition or a paid plan), reports where to plug it in, and explains that the project does not build features Plane does not offer.
 user_invocable: true
 ---
 

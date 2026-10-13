@@ -1,5 +1,7 @@
 # Agent Development Guide
 
+> **Before any new feature, run `/start-feature <description>`** (or follow `.claude/skills/start-feature/SKILL.md`). It checks that Plane offers the feature, creates the branch, prepares `FORK_CHANGELOG.md` and finds the upstream extension points before any spec or code. For now this fork only builds features that Plane offers (in a paid plan, usually): if Plane does not have it, stop and say so. A feature built anyway is an exception, documented in `FORK_CHANGELOG.md` ("Features not in Plane").
+
 ## Commands
 
 - `pnpm dev` - Start all dev servers (web:3000, admin:3001)
@@ -15,10 +17,6 @@
 
 - **Backend**: All custom Django code goes in `apps/api/plane/extended/` (`plane.extended`). APIs under `/api/extended/`, DB tables `extended_*`. Do not add new top-level apps or fork migrations under `plane.db`. Details: `docs/architecture/fork-maintenance.md`.
 - **Frontend**: Edition UI/stores live in `apps/web/oe/` (`@/plane-web/*`). Fork-only routes in `apps/web/app/routes/extended.ts`.
-
-### Before starting a feature
-
-Before writing a spec, a plan or code for a new feature, check whether Plane already offers it, in the Community Edition or a paid plan: follow `.claude/skills/plane-feature-check/SKILL.md` (Claude Code runs it automatically through a `UserPromptSubmit` hook in `.claude/settings.json`). For now the project does not build features that Plane does not offer: if Plane does not have it, stop and say so. A feature built anyway is an exception and must have its own entry in `FORK_CHANGELOG.md` ("Features not in Plane"). When it exists in a paid plan, mirror Plane's behaviour and plug into the CE placeholder.
 
 ### Touching upstream code
 

@@ -276,6 +276,7 @@ When a feature would require changing upstream signatures, shrink the feature ra
 
 #### Checklist before opening a pull request
 
+- [ ] The feature started with `/start-feature`, and the Plane feature check verdict (Plane equivalent and plan, or the "Features not in Plane" entry) is in the pull request description.
 - [ ] Every upstream file in the diff is required; every upstream file is listed in `FORK_CHANGELOG.md`, and every copy or use of upstream internals in its "Upstream dependencies" (`node tools/check-fork-changelog.mjs` passes).
 - [ ] No upstream signature, shared type or translation key was changed.
 - [ ] No formatting, lint-only or unrelated change in upstream files.

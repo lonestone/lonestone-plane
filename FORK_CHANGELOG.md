@@ -9,7 +9,7 @@ This fork of [Plane](https://github.com/makeplane/plane) keeps its own code in `
 - **Upstream dependencies**: upstream code the fork relies on without changing it (copied rendering, internal methods, task payloads). Nothing breaks at build time when upstream changes it.
 - **Features not in Plane**: the exceptions to the project direction, which is to build only features that Plane offers (see the `plane-feature-check` skill).
 
-"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `docs/features/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `.claude/hooks/`, `.claude/skills/plane-feature-check/` and this file (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
+"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `docs/features/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `.claude/skills/start-feature/`, `.claude/skills/plane-feature-check/` and this file (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
 
 ## Rules
 
@@ -54,13 +54,12 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 ### Fork tooling and conventions
 
-| File                    | Status   | Change                                                                                |
-| ----------------------- | -------- | ------------------------------------------------------------------------------------- |
-| `.claude/settings.json` | Added    | `UserPromptSubmit` hook that runs the `plane-feature-check` skill on feature requests |
-| `.gitignore`            | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)              |
-| `.husky/pre-commit`     | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                   |
-| `AGENTS.md`             | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog    |
-| `pyproject.toml`        | Added    | Python project metadata at the repository root                                        |
+| File                | Status   | Change                                                                             |
+| ------------------- | -------- | ---------------------------------------------------------------------------------- |
+| `.gitignore`        | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)           |
+| `.husky/pre-commit` | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                |
+| `AGENTS.md`         | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog |
+| `pyproject.toml`    | Added    | Python project metadata at the repository root                                     |
 
 ### Edition layer
 
