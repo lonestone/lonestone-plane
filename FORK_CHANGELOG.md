@@ -21,12 +21,12 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 ### Fork tooling and conventions
 
-| File                | Status   | Change                                                                             |
-| ------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `.gitignore`        | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)           |
-| `.husky/pre-commit` | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                |
-| `AGENTS.md`         | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog |
-| `pyproject.toml`    | Added    | Python project metadata at the repository root                                     |
+| File                | Status   | Change                                                                                    |
+| ------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `.gitignore`        | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)                  |
+| `.husky/pre-commit` | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                       |
+| `AGENTS.md`         | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog, tests |
+| `pyproject.toml`    | Added    | Python project metadata at the repository root                                            |
 
 ### Edition layer
 

@@ -1,6 +1,6 @@
 ---
 name: start-feature
-description: Entry point for any new feature in this fork. Use when the user starts a feature (`/start-feature <description>`, "start a feature", "nouvelle fonctionnalité", "on attaque la feature…"). Runs the Plane feature check, creates the branch, prepares FORK_CHANGELOG.md and finds the upstream extension points before any spec or code.
+description: Entry point for any new feature in this fork. Use when the user starts a feature (`/start-feature <description>`, "start a feature", "nouvelle fonctionnalité", "on attaque la feature…"). Runs the Plane feature check, creates the branch, prepares FORK_CHANGELOG.md, finds the upstream extension points and plans the tests before any spec or code.
 user_invocable: true
 ---
 
@@ -35,9 +35,18 @@ Before writing code, list where the feature plugs into upstream, in this order o
 
 Report to the user the upstream files the feature would modify, and the upstream code it would rely on without modifying it. Wait for their agreement before writing code: this is the feature's upstream footprint.
 
-## 5. Recall the rules for the rest of the work
+## 5. Plan the tests
 
-Point to "Keeping upstream changes minimal" in `docs/architecture/fork-maintenance.md` and its checklist before opening a pull request. If the user works with Spec Kit locally, continue with `/speckit-specify`.
+Before writing code, list the tests the feature needs, following "Testing" in `docs/architecture/fork-maintenance.md`:
+
+- **Backend**: the unit tests and the contract tests of each `/api/extended/` route (permissions, validation errors, all or nothing behaviour).
+- **Frontend**: the user paths to cover end to end in `apps/web-e2e/`, and the accessible locators they rely on (role, label). Plan no `data-testid` in upstream files.
+
+Report the list to the user with the extension points.
+
+## 6. Recall the rules for the rest of the work
+
+Point to "Keeping upstream changes minimal" and "Testing" in `docs/architecture/fork-maintenance.md`, and to its checklist before opening a pull request. If the user works with Spec Kit locally, continue with `/speckit-specify`.
 
 ## Output
 
@@ -47,5 +56,6 @@ Plane check: <verdict, plans, sources>
 Branch: <branch name>
 Extension points: <placeholders, store methods, services>
 Upstream footprint: <files to modify / files relied on, or "none">
+Tests: <unit and contract tests / e2e user paths>
 Next: <spec, plan, or code>
 ```
