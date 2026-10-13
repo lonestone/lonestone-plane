@@ -399,7 +399,7 @@ Add integration tests for your custom components that assert the expected props 
 
 ### Tracking core changes
 
-Some fork features need a few lines in `core/` because upstream offers no `@/plane-web` hook at that point. Every upstream file the fork modifies, adds or deletes is listed in [`FORK_CHANGELOG.md`](../../FORK_CHANGELOG.md) ("Upstream files touched"), grouped by feature, along with the upstream code the fork copies or relies on ("Upstream dependencies"), in the same commit; the pre-commit hook enforces it. Re-check those files after every `upstream/preview` merge. How each feature plugs into them is explained in its own page under [`docs/features/`](../features/).
+Some fork features need a few lines in `core/` because upstream offers no `@/plane-web` hook at that point. Every upstream file the fork modifies, adds or deletes is listed in [`FORK_CHANGELOG.md`](../../FORK_CHANGELOG.md) ("Upstream files touched"), grouped by feature, along with the upstream code the fork copies or relies on ("Upstream dependencies"), in the same commit; the pre-commit hook enforces it. Re-check those files after every `upstream/preview` merge. How each feature plugs into them is summed up under the feature in that file.
 
 The pre-commit hook runs `oxlint --deny-warnings` on every committed file, so touching a `core/` file also surfaces its existing upstream warnings. Silence them with an `oxlint-disable-next-line <rule> -- upstream code, …` comment rather than fixing them: a fix rewrites upstream lines and turns the next merge of that code into a conflict.
 

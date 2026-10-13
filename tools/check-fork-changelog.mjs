@@ -24,7 +24,6 @@ const FORK_OWNED = [
   "apps/web/oe/",
   "apps/api/plane/extended/",
   "docs/architecture/",
-  "docs/features/",
   "tools/",
   "deployments/lonestone/",
   "docker-compose.lonestone.yml",
@@ -35,16 +34,21 @@ const FORK_OWNED = [
 const isUpstreamFile = (file) => !FORK_OWNED.some((owned) => file === owned || file.startsWith(owned));
 
 const git = (...args) => execFileSync("git", args, { encoding: "utf8" }).trim();
+// For lookups that may fail (a path missing on one side): git's error output is not shown.
 const tryGit = (...args) => {
   try {
-    return git(...args);
+    return execFileSync("git", args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
   } catch {
     return null;
   }
 };
 const lines = (output) => (output ? output.split("\n").filter(Boolean) : []);
 
-const changelog = readFileSync(CHANGELOG, "utf8");
+const args = process.argv.slice(2);
+const stagedMode = args.includes("--staged");
+// In pre-commit, read the changelog as it will be committed (index), not the working tree: a row added
+// to the file but not staged must not let the commit through.
+const changelog = (stagedMode && tryGit("show", `:${CHANGELOG}`)) || readFileSync(CHANGELOG, "utf8");
 
 // Paths in the first column of the tables of a "## " section (all its sub-sections included).
 function tablePaths(title) {
@@ -62,9 +66,8 @@ function report(level, title, files, hint) {
 }
 
 const listed = tablePaths(FILES_SECTION);
-const args = process.argv.slice(2);
 
-if (args.includes("--staged")) {
+if (stagedMode) {
   // With an upstream remote, a file staged back to its upstream content no longer needs a row.
   const upstreamBase = tryGit("rev-parse", "--verify", "-q", "upstream/preview")
     ? tryGit("merge-base", "HEAD", "upstream/preview")

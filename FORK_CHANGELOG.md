@@ -1,52 +1,19 @@
 # Fork changelog
 
-This fork of [Plane](https://github.com/makeplane/plane) keeps its own code in `apps/web/oe/` and `apps/api/plane/extended/`. This file tracks how the fork depends on upstream code, so that each upstream merge can be checked file by file:
+Registry of what this fork changes in upstream Plane and relies on from it, grouped by feature. How to keep it up to date: "The fork changelog" in [`docs/architecture/fork-maintenance.md`](docs/architecture/fork-maintenance.md#the-fork-changelog).
 
-- **Upstream sync**: the last upstream commit merged and reviewed, and how to merge the next one.
-- **Features**: every fork feature and its Plane equivalent.
-- **Upstream files touched**: every upstream file the fork modifies, adds or deletes, grouped by feature.
-- **Known gaps with the conventions**: listed under a feature's files when its code predates the rules in `AGENTS.md`; each one is to be fixed in a dedicated pull request. Do not take that code as a model.
-- **Upstream dependencies**: upstream code the fork relies on without changing it (copied rendering, internal methods, task payloads). Nothing breaks at build time when upstream changes it.
-- **Features not in Plane**: the exceptions to the project direction, which is to build only features that Plane offers (see the `plane-feature-check` skill).
-
-"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `docs/features/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `.claude/skills/start-feature/`, `.claude/skills/plane-feature-check/` and this file (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
-
-## Rules
-
-- A commit that modifies, adds or deletes an upstream file adds its row to "Upstream files touched" in the same commit. The pre-commit hook blocks the commit otherwise (`tools/check-fork-changelog.mjs --staged`).
-- Rows are grouped by feature, one sub-section per feature in the order of the "Features" table. A new feature adds its row to "Features" and its own sub-sections at the end. A file touched by two features appears under both.
-- When a file goes back to its upstream content, remove its row.
-- Fork code that copies upstream code or calls upstream internals adds a row to "Upstream dependencies", in the same commit.
-- Before a pull request, run the audit. It compares the tracked and staged files with upstream (untracked files are ignored until staged) and fails on missing or stale rows:
-
-  ```sh
-  git fetch upstream preview
-  node tools/check-fork-changelog.mjs
-  ```
-
-- A feature that Plane does not offer gets an entry in "Features not in Plane", written as part of the feature.
-
-## Upstream sync
-
-- **Last upstream sync**: `65f4a99657` (`upstream/preview` of 2026-08-03), merged in `74d7b4187c`.
-
-To merge upstream:
-
-1. `git fetch upstream preview`, then run the audit. Its warning lists the files of "Upstream files touched" and "Upstream dependencies" that upstream changed since the last sync.
-2. Merge `upstream/preview`. For each listed file, re-check the fork change or the fork code that relies on it (the "Change" and "What the fork relies on" columns say what to look for).
-3. Run the audit again: fix missing or stale rows, update the paths of files that upstream moved. Run the tests.
-4. Set "Last upstream sync" to the merged upstream commit, in the same pull request.
+**Last upstream sync**: `65f4a99657` (`upstream/preview` of 2026-08-03), merged in `74d7b4187c`.
 
 ## Features
 
-| Feature                           | Pull request                       | Plane equivalent                                                                                     | Docs                                                          |
-| --------------------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| Fork tooling and conventions      | #1, #2 and the fork conventions PR | None: repository tooling                                                                             | —                                                             |
-| Edition layer                     | #2                                 | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends       | —                                                             |
-| Project templates                 | #2                                 | Project Templates (Business, Enterprise)                                                             | —                                                             |
-| Guest collaboration               | #3, #4                             | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour | —                                                             |
-| Bulk edit (LONESTONEP-5)          | #6                                 | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                 | [bulk-edit.md](docs/features/bulk-edit.md)                    |
-| Board multi-select (LONESTONEP-5) | #6                                 | None: Plane offers bulk operations in the list and spreadsheet layouts only                          | [bulk-edit.md](docs/features/bulk-edit.md#board-multi-select) |
+| Feature                           | Pull request | Plane equivalent                                                                                     |
+| --------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
+| Fork tooling and conventions      | #1, #2, #7   | None: repository tooling                                                                             |
+| Edition layer                     | #2           | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends       |
+| Project templates                 | #2           | Project Templates (Business, Enterprise)                                                             |
+| Guest collaboration               | #3, #4       | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour |
+| Bulk edit (LONESTONEP-5)          | #6           | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                 |
+| Board multi-select (LONESTONEP-5) | #6           | None: Plane offers bulk operations in the list and spreadsheet layouts only                          |
 
 ## Upstream files touched
 
@@ -159,22 +126,28 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 ### Bulk edit (LONESTONEP-5)
 
-| File                                                              | Status   | Change                                                                                                    |
-| ----------------------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `apps/api/plane/tests/contract/app/test_issue_bulk_update_app.py` | Added    | Contract tests of the bulk update endpoint                                                                |
-| `apps/api/plane/tests/unit/extended/test_issue_bulk_update.py`    | Added    | Unit tests of the bulk update service                                                                     |
-| `apps/web/core/components/issues/bulk-operations/root.tsx`        | Modified | Renders the fork `BulkOperationsBar` instead of `BulkOperationsUpgradeBanner`; upstream display rule kept |
-| `apps/web/core/hooks/use-bulk-operation-status.ts`                | Modified | Re-exports the fork `useBulkOperationStatus` (upstream hard-codes `false`)                                |
-| `apps/web/core/services/issue/issue.service.ts`                   | Modified | `bulkOperations` posts to `/api/extended/.../issues/bulk-update/` (URL only)                              |
-| `packages/i18n/src/locales/en/work-item.json`                     | Modified | Keys appended at the end of `bulk_operations`; no upstream key changed                                    |
-| `packages/i18n/src/locales/fr/work-item.json`                     | Modified | Keys appended at the end of `bulk_operations`; no upstream key changed                                    |
+| File                                                              | Status   | Change                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/contract/app/test_issue_bulk_update_app.py` | Added    | Contract tests of the bulk update endpoint                                                                                                                                                                                |
+| `apps/api/plane/tests/unit/extended/test_issue_bulk_update.py`    | Added    | Unit tests of the bulk update service                                                                                                                                                                                     |
+| `apps/web/core/components/issues/bulk-operations/root.tsx`        | Modified | Renders the fork `BulkOperationsBar` instead of `BulkOperationsUpgradeBanner`. Why: keeps upstream's display rule (active, enabled selection) and its call sites in every layout; only the paid-edition banner is swapped |
+| `apps/web/core/hooks/use-bulk-operation-status.ts`                | Modified | Re-exports the fork `useBulkOperationStatus`. Why: upstream hard-codes `() => false`, which hides the selection checkboxes                                                                                                |
+| `apps/web/core/services/issue/issue.service.ts`                   | Modified | `bulkOperations` posts to `/api/extended/.../issues/bulk-update/` (URL only). Why: the upstream endpoint only exists in the paid edition                                                                                  |
+| `packages/i18n/src/locales/en/work-item.json`                     | Modified | Keys appended at the end of `bulk_operations`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours                               |
+| `packages/i18n/src/locales/fr/work-item.json`                     | Modified | Keys appended at the end of `bulk_operations`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours                               |
+
+**How it plugs in**: the bar (`apps/web/oe/components/issues/bulk-operations/`) replaces upstream's "Upgrade" banner and calls a fork endpoint in `plane.extended` that is all or nothing, so that the upstream stores stay untouched. It updates the store optimistically through upstream's local `issueUpdate`, reverts the change if the API rejects a batch, and never refetches the view (`fetchIssuesWithExistingPagination` clears the list first).
+
+**Dropped**: per-work-item results ("48 updated, 2 skipped"). They changed upstream signatures in nine core files (the eight issue store interfaces and the base store). Do not bring them back without weighing that cost; the design is in the history of #6.
 
 ### Board multi-select (LONESTONEP-5)
 
-| File                                                                        | Status   | Change                                                                               |
-| --------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------ |
-| `apps/web/core/components/issues/issue-layouts/kanban/base-kanban-root.tsx` | Modified | Renders `BoardSelection` next to the board's scroll container (one import, one line) |
-| `apps/web/core/components/issues/issue-layouts/kanban/block.tsx`            | Modified | Renders `BoardCardSelection` inside the card wrapper (one import, one line)          |
+| File                                                                        | Status   | Change                                                                                                                                                                 |
+| --------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/core/components/issues/issue-layouts/kanban/base-kanban-root.tsx` | Modified | Renders `BoardSelection` next to the board's scroll container (one import, one line). Why: the board has no selection upstream and no `@/plane-web` extension point    |
+| `apps/web/core/components/issues/issue-layouts/kanban/block.tsx`            | Modified | Renders `BoardCardSelection` inside the card wrapper (one import, one line): card checkbox, selected border and touch selection. Why: the card itself stays unmodified |
+
+**How it plugs in**: `BoardSelection` (`apps/web/oe/components/issues/board-selection/`) builds the selection groups, renders the bulk bar over the board and shares the selection helpers through a MobX box; `BoardCardSelection` adds the checkbox and touch selection on the card wrapper. Only upstream's selection helpers are used.
 
 ## Upstream dependencies
 
@@ -190,25 +163,21 @@ Upstream files the fork relies on without changing them. Only bulk edit and boar
 | `apps/web/core/components/issues/issue-layouts/properties/label-dropdown.tsx` | Option rendering, copied                                                                                                              | `apps/web/oe/components/issues/bulk-operations/dropdown-options.tsx` |
 | `apps/api/plane/bgtasks/issue_activities_task.py`                             | `issue_activity` task and the shape of its `requested_data` / `current_instance` per property                                         | `apps/api/plane/extended/services/issue_bulk_update.py`              |
 | `apps/api/plane/bgtasks/webhook_task.py`                                      | `model_activity` task                                                                                                                 | `apps/api/plane/extended/services/issue_bulk_update.py`              |
+| `apps/web/core/store/issue/project/issue.store.ts`                            | `updateIssue = this.issueUpdate`, so that `updateIssue` keeps the `shouldSync` parameter                                              | `apps/web/oe/components/issues/bulk-operations/use-bulk-update.ts`   |
+| `apps/web/core/store/issue/cycle/issue.store.ts`                              | `updateIssue = this.issueUpdate`; `fetchParentStats` logic copied (cycle details, plus `fetchActiveCycleProgressPro` for v2 cycles)   | `apps/web/oe/components/issues/bulk-operations/use-bulk-update.ts`   |
+| `apps/web/core/store/issue/module/issue.store.ts`                             | `updateIssue = this.issueUpdate`; `fetchParentStats` logic copied (module details)                                                    | `apps/web/oe/components/issues/bulk-operations/use-bulk-update.ts`   |
+| `apps/web/core/store/issue/project-views/issue.store.ts`                      | `updateIssue = this.issueUpdate`                                                                                                      | `apps/web/oe/components/issues/bulk-operations/use-bulk-update.ts`   |
+| `apps/web/core/hooks/use-issue-layout-store.ts`                               | `IssuesStoreContext` is only provided by the work item layout roots, so pages sharing the route params get no store type              | `apps/web/oe/hooks/use-bulk-operation-status.ts`                     |
 
 ### Board multi-select (LONESTONEP-5)
 
-| Upstream file                                                            | What the fork relies on              | Fork code                                                          |
-| ------------------------------------------------------------------------ | ------------------------------------ | ------------------------------------------------------------------ |
-| `apps/web/core/hooks/use-multiple-select.ts`                             | `TSelectionHelper` selection helpers | `apps/web/oe/components/issues/board-selection/`                   |
-| `apps/web/core/components/core/multiple-select/select-group.tsx`         | `MultipleSelectGroup`                | `apps/web/oe/components/issues/board-selection/root.tsx`           |
-| `apps/web/core/components/core/multiple-select/entity-select-action.tsx` | `MultipleSelectEntityAction`         | `apps/web/oe/components/issues/board-selection/card-selection.tsx` |
+| Upstream file                                                            | What the fork relies on                                                                                                 | Fork code                                                              |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `apps/web/core/hooks/use-multiple-select.ts`                             | `TSelectionHelper` selection helpers                                                                                    | `apps/web/oe/components/issues/board-selection/`                       |
+| `apps/web/core/components/core/multiple-select/select-group.tsx`         | `MultipleSelectGroup`                                                                                                   | `apps/web/oe/components/issues/board-selection/root.tsx`               |
+| `apps/web/core/components/core/multiple-select/entity-select-action.tsx` | `MultipleSelectEntityAction`                                                                                            | `apps/web/oe/components/issues/board-selection/card-selection.tsx`     |
+| `apps/web/core/components/issues/issue-layouts/kanban/block.tsx`         | DOM: the element rendered by `BoardCardSelection` sits directly in the card wrapper, which receives the touch listeners | `apps/web/oe/components/issues/board-selection/use-touch-selection.ts` |
 
 ## Features not in Plane
 
-None so far. A feature built although Plane does not offer it (see the `plane-feature-check` skill) gets an entry here, written as part of the feature:
-
-```md
-### <Feature name> (<work item ID>, PR #<number>)
-
-- **Decided by / on**: <who>, <date>
-- **Why it is built anyway**: <the need, and why the closest Plane feature does not meet it>
-- **Closest Plane feature**: <name and plan, or "none">
-- **Upstream files touched**: <list, also in "Upstream files touched">
-- **Risk on upstream merges**: <what could clash if Plane ships something similar>
-```
+None so far.
