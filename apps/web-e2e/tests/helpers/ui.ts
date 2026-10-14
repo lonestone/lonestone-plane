@@ -7,12 +7,9 @@
 import type { Locator, Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
-/** The bulk actions bar: the element around the live "N selected" counter. */
+/** The bulk actions bar: a region named after its "N selected" counter. */
 export function bulkBar(page: Page): Locator {
-  return page
-    .locator('span[aria-live="polite"]')
-    .filter({ hasText: /selected/ })
-    .locator("xpath=../..");
+  return page.getByRole("region", { name: /selected$/ });
 }
 
 /** A property button of the bulk actions bar ("State", "Priority", "Assignees"…). */
