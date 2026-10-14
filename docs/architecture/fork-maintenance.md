@@ -280,6 +280,36 @@ When a feature would require changing upstream signatures, shrink the feature ra
 - [ ] No formatting, lint-only or unrelated change in upstream files.
 - [ ] The store is updated optimistically (and reverted on error) rather than by refetching the view.
 - [ ] Workarounds that depend on upstream internals are commented with what to re-check.
+- [ ] Backend changes have unit and contract tests, user paths have e2e tests ("Testing" below); both suites were run and the results are in the pull request description.
+
+### Testing
+
+Upstream asks for tests on every feature and bug fix (`CONTRIBUTING.md`), but only the API has a suite: `apps/web` has no test framework, and upstream CI runs no tests. The fork sets its own rules for the frontend.
+
+#### What to test where
+
+| Code                         | Tests                         | Where                                                                                                                          |
+| ---------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Backend (`plane.extended`)   | Unit and contract, required   | `apps/api/plane/tests/unit/extended/`, `apps/api/plane/tests/contract/app/`, following `apps/api/plane/tests/TESTING_GUIDE.md` |
+| Frontend (`oe/`, core hooks) | End to end, on the user paths | `apps/web-e2e/` (Playwright)                                                                                                   |
+
+- **Each `/api/extended/` route has contract tests**: permissions (an outsider gets the same response as for an unknown resource), validation errors, and all or nothing behaviour.
+- **No unit test framework in `apps/web` for a fork feature.** It would change upstream configuration (`package.json`, lockfile, tooling). Cover the behaviour end to end instead.
+- **Tests are a budget.** Cover what would reach a user if it broke: the main path, the errors the user sees, the upstream behaviour the feature relies on. Delete a test when the behaviour it covers is dropped; do not keep it skipped.
+
+#### End-to-end rules
+
+- **Locate elements as a user does**: by role and accessible name (`getByRole`, `getByLabel`, `getByText`), as recommended in [Playwright's best practices](https://playwright.dev/docs/best-practices). Never add a `data-testid` to an upstream file; in `oe/`, add one only when no accessible locator exists.
+- **Each test creates its own data** through the API helpers, and does not depend on another test or on the order of the run.
+- **Assert what the user sees**: values shown, selection kept, no list reload. Not store internals.
+- **No flaky test.** Fix it or delete it; do not hide it with retries.
+- **Run against the throwaway stack** (`docker-compose-e2e.yml`), never the dev stack.
+
+#### Running the suites
+
+- Backend: `docker compose -f docker-compose-test.yml run --rm api-tests pytest plane/tests/unit/extended plane/tests/contract/app` (full suite and setup in `AGENTS.md`, "Backend tests").
+- End to end: `pnpm --filter=web-e2e test:e2e` (setup in `apps/web-e2e/README.md`).
+- Run both before a pull request and after each upstream merge.
 
 ### The fork changelog
 
@@ -292,7 +322,7 @@ When a feature would require changing upstream signatures, shrink the feature ra
 - **Upstream dependencies**: upstream code the fork relies on without changing it (copied rendering, internal methods, task payloads). Nothing breaks at build time when upstream changes it.
 - **Features not in Plane**: the exceptions to the project direction, which is to build only features that Plane offers (see the `plane-feature-check` skill).
 
-"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `.claude/skills/start-feature/`, `.claude/skills/plane-feature-check/` and `FORK_CHANGELOG.md` (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
+"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `apps/web-e2e/`, `docker-compose-e2e.yml`, `.claude/skills/start-feature/`, `.claude/skills/plane-feature-check/` and `FORK_CHANGELOG.md` (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
 
 #### Rules
 
