@@ -48,6 +48,7 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 | File                                                                                      | Status   | Change                                                                                |
 | ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/contract/app/test_project_template_app.py`                          | Added    | Contract tests of the `/api/extended/` template routes                                |
 | `apps/api/plane/tests/unit/extended/test_apply_project_template.py`                       | Added    | Unit tests: applying a template                                                       |
 | `apps/api/plane/tests/unit/extended/test_project_template_permissions.py`                 | Added    | Unit tests: template permissions                                                      |
 | `apps/web/app/(all)/[workspaceSlug]/(settings)/settings/(workspace)/templates/header.tsx` | Added    | Header of the workspace Templates settings page                                       |
@@ -71,6 +72,7 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 - `apps/web/core/components/projects/create/root.tsx` holds about 80 lines of template logic (form prefill, apply after creation) in core, instead of a fork component or hook in `oe/` wired with one line.
 - The template types and services live in `packages/types` and `packages/services`, shared with upstream, instead of `oe/`: five more upstream files.
 - The `source_project` strings are in English only.
+- The project creation form is filled from the template by a request that is not cancelled: when it answers after the user typed (slow network, or React StrictMode running the effect twice in dev), the typed name is replaced. Found by the e2e suite.
 
 ### Guest collaboration
 

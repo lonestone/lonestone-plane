@@ -92,6 +92,8 @@ export async function createWorkspace(session: PlaneSession): Promise<{ slug: st
   return call(session, "POST", "/api/workspaces/", { name: slug, slug, organization_size: "Just myself" });
 }
 
+export const ROLE = { guest: 5, member: 15 } as const;
+
 export async function createProject(session: PlaneSession, workspaceSlug: string): Promise<{ id: string }> {
   return call(session, "POST", `/api/workspaces/${workspaceSlug}/projects/`, {
     name: "Bulk edit",
@@ -201,7 +203,7 @@ export async function addModuleWorkItems(
 }
 
 /**
- * Adds a second, freshly signed-up user to the project as a member (role 15), through the real
+ * Adds a second, freshly signed-up user to the project (member by default, role 15), through the real
  * invitation flow: workspace invite, acceptance by the invitee, then project membership.
  * `memberRequest` must come from a separate browser context (its own cookie jar).
  */
@@ -209,11 +211,12 @@ export async function addProjectMember(
   owner: PlaneSession,
   memberRequest: APIRequestContext,
   workspaceSlug: string,
-  projectId: string
+  projectId: string,
+  role: (typeof ROLE)[keyof typeof ROLE] = ROLE.member
 ): Promise<{ id: string; email: string; displayName: string }> {
   const member = await signUpFreshUser(memberRequest);
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/invitations/`, {
-    emails: [{ email: member.email, role: 15 }],
+    emails: [{ email: member.email, role }],
   });
   const invitations = await call<{ id: string; workspace: { slug: string } }[]>(
     member,
@@ -225,7 +228,7 @@ export async function addProjectMember(
   await call(member, "POST", "/api/users/me/workspaces/invitations/", { invitations: [invitation.id] });
   const me = await call<{ id: string; display_name: string }>(member, "GET", "/api/users/me/");
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/projects/${projectId}/members/`, {
-    members: [{ member_id: me.id, role: 15 }],
+    members: [{ member_id: me.id, role }],
   });
   return { id: me.id, email: member.email, displayName: me.display_name };
 }
@@ -233,4 +236,24 @@ export async function addProjectMember(
 export async function getCurrentUser(session: PlaneSession): Promise<{ id: string; displayName: string }> {
   const me = await call<{ id: string; display_name: string }>(session, "GET", "/api/users/me/");
   return { id: me.id, displayName: me.display_name };
+}
+
+export async function listProjectWorkItems(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string
+): Promise<TWorkItem[]> {
+  const response = await call<{ results: TWorkItem[] } | TWorkItem[]>(
+    session,
+    "GET",
+    `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/`
+  );
+  return Array.isArray(response) ? response : response.results;
+}
+
+export async function listProjects(
+  session: PlaneSession,
+  workspaceSlug: string
+): Promise<{ id: string; name: string }[]> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/`);
 }

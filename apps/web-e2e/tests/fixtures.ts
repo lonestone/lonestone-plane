@@ -6,6 +6,7 @@
 
 import { test as base } from "@playwright/test";
 import type { PlaneSession, TState, TWorkItem } from "./helpers/plane";
+import { API_URL } from "./helpers/urls";
 import {
   createProject,
   createWorkItem,
@@ -28,6 +29,9 @@ export type ProjectFixture = {
  */
 export const test = base.extend<{ project: ProjectFixture }>({
   project: async ({ page }, use) => {
+    // Plane signs uploads on the API host (USE_MINIO=1), behind a proxy that the e2e stack does not have:
+    // file uploads (the cover of a new project) succeed without storing anything.
+    await page.context().route(`${API_URL}/uploads**`, (route) => route.fulfill({ status: 204 }));
     const session = await signUpFreshUser(page.request);
     const { slug: workspaceSlug } = await createWorkspace(session);
     const { id: projectId } = await createProject(session, workspaceSlug);
