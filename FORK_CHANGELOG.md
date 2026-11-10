@@ -6,16 +6,17 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 
 ## Features
 
-| Feature                              | Pull request   | Plane equivalent                                                                                     |
-| ------------------------------------ | -------------- | ---------------------------------------------------------------------------------------------------- |
-| Fork tooling and conventions         | #1, #2, #7     | None: repository tooling                                                                             |
-| Edition layer                        | #2             | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends       |
-| Project templates                    | #2             | Project Templates (Business, Enterprise)                                                             |
-| Guest collaboration                  | #3, #4         | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour |
-| Bulk edit (LONESTONEP-5)             | #6             | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                 |
-| Board multi-select (LONESTONEP-5)    | #6             | None: Plane offers bulk operations in the list and spreadsheet layouts only                          |
-| End-to-end tests (LONESTONEP-5)      | (to be opened) | None: test tooling of the fork                                                                       |
-| Attachment file types (LONESTONEP-9) | (to be opened) | None: bug fix. Plane accepts these attachments but its upload type detection rejects them            |
+| Feature                                    | Pull request   | Plane equivalent                                                                                                     |
+| ------------------------------------------ | -------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Fork tooling and conventions               | #1, #2, #7     | None: repository tooling                                                                                             |
+| Edition layer                              | #2             | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends                       |
+| Project templates                          | #2             | Project Templates (Business, Enterprise)                                                                             |
+| Guest collaboration                        | #3, #4         | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour                 |
+| Bulk edit (LONESTONEP-5)                   | #6             | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                                 |
+| Board multi-select (LONESTONEP-5)          | #6             | None: Plane offers bulk operations in the list and spreadsheet layouts only                                          |
+| End-to-end tests (LONESTONEP-5)            | (to be opened) | None: test tooling of the fork                                                                                       |
+| Attachment file types (LONESTONEP-9)       | (to be opened) | None: bug fix. Plane accepts these attachments but its upload type detection rejects them                            |
+| Assign work items to guests (LONESTONEP-4) | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: Commenter role (Pro and above), custom roles (Enterprise) |
 
 ## Upstream files touched
 
@@ -168,6 +169,10 @@ The suite itself (`apps/web-e2e/`, `docker-compose-e2e.yml`) is fork-owned.
 | -------------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `packages/services/src/file/helper.ts` | Modified | `validateAndDetectFileType` falls back to the browser's `file.type` when the file signature is a generic container (`application/x-cfb`, `application/zip`) or unknown. Why: `.doc`, `.xls` and `.csv` were sent with a type the API rejects (400 "Invalid file type."), and `.xlsx` was stored as a zip. Drop when upstream fixes the detection |
 
+### Assign work items to guests (LONESTONEP-4)
+
+None yet: rows are added with the code.
+
 ## Upstream dependencies
 
 Upstream files the fork relies on without changing them. Only the LONESTONEP-5 features are inventoried so far; the dependencies of the earlier features are still to be listed.
@@ -205,6 +210,22 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 | `apps/web/core/components/issues/peek-overview/`                                                                    | The "Work item title" text box of the peek overview                                                                                                                                                      | `apps/web-e2e/tests/helpers/ui.ts` |
 | `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(detail)/`, `modules/(detail)/` | Sidebar toggle (a `PanelRight` icon button, no accessible name), `cycle_sidebar_collapsed` (boolean) and `module_sidebar_collapsed` (string) in local storage, "completed/total" progress in the sidebar | `apps/web-e2e/tests/views.spec.ts` |
 
+### Assign work items to guests (LONESTONEP-4)
+
+None yet: rows are added with the code.
+
 ## Features not in Plane
 
-None so far.
+### Guest collaboration
+
+- **Not in Plane**: Plane's project Guest cannot see or create work items; its Commenter role (Pro and above) can view and comment but not edit. No plan lets a guest create work items and use cycles and modules on a project. Closest: custom roles (Enterprise, "Custom roles via RBAC + GAC").
+- **Why built anyway**: clients and external contributors work in the projects of a shared workspace and must not see the other clients' projects, which the Member role would open to them.
+- **Decided by**: built before the feature check existed (#3, #4); recorded on 2026-11-10 when LONESTONEP-4 extended it.
+- **Upstream files**: see "Guest collaboration" under "Upstream files touched".
+
+### Assign work items to guests (LONESTONEP-4)
+
+- **Not in Plane**: no plan documents assigning a work item to a guest. Community Edition only has `guest_view_all_features`, which lets guests see every work item of a project.
+- **Why built anyway**: hand a work item to a client or an external contributor, who finds it in their own space, without giving them the Member role.
+- **Decided by**: Loïc Vanderschooten, on 2026-11-10.
+- **Upstream files**: see "Assign work items to guests (LONESTONEP-4)" under "Upstream files touched".

@@ -274,3 +274,36 @@ export async function listAttachments(
     `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/attachments/`
   );
 }
+
+/** "Allow guests to collaborate" (fork setting): guests edit work items and use cycles and modules. */
+export async function setGuestCollaboration(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  enabled: boolean
+): Promise<void> {
+  await call(session, "PATCH", `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/guest-collaboration/`, {
+    guest_can_collaborate: enabled,
+  });
+}
+
+/** "Guest access" (upstream setting): guests see every work item of the project. */
+export async function setGuestAccess(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  enabled: boolean
+): Promise<void> {
+  await call(session, "PATCH", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`, {
+    guest_view_all_features: enabled,
+  });
+}
+
+/** Reads the project settings the guest assignment depends on. */
+export async function getProject(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string
+): Promise<{ id: string; guest_view_all_features: boolean }> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`);
+}
