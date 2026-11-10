@@ -6,14 +6,15 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 
 ## Features
 
-| Feature                           | Pull request | Plane equivalent                                                                                     |
-| --------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------- |
-| Fork tooling and conventions      | #1, #2, #7   | None: repository tooling                                                                             |
-| Edition layer                     | #2           | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends       |
-| Project templates                 | #2           | Project Templates (Business, Enterprise)                                                             |
-| Guest collaboration               | #3, #4       | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour |
-| Bulk edit (LONESTONEP-5)          | #6           | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                 |
-| Board multi-select (LONESTONEP-5) | #6           | None: Plane offers bulk operations in the list and spreadsheet layouts only                          |
+| Feature                           | Pull request   | Plane equivalent                                                                                     |
+| --------------------------------- | -------------- | ---------------------------------------------------------------------------------------------------- |
+| Fork tooling and conventions      | #1, #2, #7     | None: repository tooling                                                                             |
+| Edition layer                     | #2             | None: infrastructure. The `@/plane-web` alias and the fork store that every fork store extends       |
+| Project templates                 | #2             | Project Templates (Business, Enterprise)                                                             |
+| Guest collaboration               | #3, #4         | Closest: guests with custom roles via RBAC + GAC (Enterprise). Not checked against Plane's behaviour |
+| Bulk edit (LONESTONEP-5)          | #6             | Bulk Ops (Pro: all properties; Business, Enterprise: also transfers and conversions)                 |
+| Board multi-select (LONESTONEP-5) | #6             | None: Plane offers bulk operations in the list and spreadsheet layouts only                          |
+| End-to-end tests (LONESTONEP-5)   | (to be opened) | None: test tooling of the fork                                                                       |
 
 ## Upstream files touched
 
@@ -21,12 +22,12 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 ### Fork tooling and conventions
 
-| File                | Status   | Change                                                                             |
-| ------------------- | -------- | ---------------------------------------------------------------------------------- |
-| `.gitignore`        | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)           |
-| `.husky/pre-commit` | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                |
-| `AGENTS.md`         | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog |
-| `pyproject.toml`    | Added    | Python project metadata at the repository root                                     |
+| File                | Status   | Change                                                                                    |
+| ------------------- | -------- | ----------------------------------------------------------------------------------------- |
+| `.gitignore`        | Modified | Ignores local Spec Kit files (`.specify/`, `speckit-*` skills, `specs/`)                  |
+| `.husky/pre-commit` | Modified | Runs `tools/check-fork-changelog.mjs --staged` before `lint-staged`                       |
+| `AGENTS.md`         | Modified | Fork conventions: backend namespace, upstream code rules, feature check, changelog, tests |
+| `pyproject.toml`    | Added    | Python project metadata at the repository root                                            |
 
 ### Edition layer
 
@@ -47,6 +48,7 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 | File                                                                                      | Status   | Change                                                                                |
 | ----------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/contract/app/test_project_template_app.py`                          | Added    | Contract tests of the `/api/extended/` template routes                                |
 | `apps/api/plane/tests/unit/extended/test_apply_project_template.py`                       | Added    | Unit tests: applying a template                                                       |
 | `apps/api/plane/tests/unit/extended/test_project_template_permissions.py`                 | Added    | Unit tests: template permissions                                                      |
 | `apps/web/app/(all)/[workspaceSlug]/(settings)/settings/(workspace)/templates/header.tsx` | Added    | Header of the workspace Templates settings page                                       |
@@ -70,6 +72,7 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 - `apps/web/core/components/projects/create/root.tsx` holds about 80 lines of template logic (form prefill, apply after creation) in core, instead of a fork component or hook in `oe/` wired with one line.
 - The template types and services live in `packages/types` and `packages/services`, shared with upstream, instead of `oe/`: five more upstream files.
 - The `source_project` strings are in English only.
+- The project creation form is filled from the template by a request that is not cancelled: when it answers after the user typed (slow network, or React StrictMode running the effect twice in dev), the typed name is replaced. Found by the e2e suite.
 
 ### Guest collaboration
 
@@ -149,9 +152,18 @@ Status is relative to upstream: `Modified`, `Added` or `Deleted`.
 
 **How it plugs in**: `BoardSelection` (`apps/web/oe/components/issues/board-selection/`) builds the selection groups, renders the bulk bar over the board and shares the selection helpers through a MobX box; `BoardCardSelection` adds the checkbox and touch selection on the card wrapper. Only upstream's selection helpers are used.
 
+### End-to-end tests (LONESTONEP-5)
+
+The suite itself (`apps/web-e2e/`, `docker-compose-e2e.yml`) is fork-owned.
+
+| File                  | Status   | Change                                                                                                                                                                                                                |
+| --------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pnpm-workspace.yaml` | Modified | Catalog entries `@playwright/test` and `testcontainers`; `allowBuilds` entries for their native dependencies (`cpu-features`, `protobufjs`, `ssh2`, disabled). Why: `apps/web-e2e` uses `catalog:` like every package |
+| `pnpm-lock.yaml`      | Modified | Lock entries of `apps/web-e2e`. Why: generated by `pnpm install`; on conflicts, take upstream's lockfile and run `pnpm install` again                                                                                 |
+
 ## Upstream dependencies
 
-Upstream files the fork relies on without changing them. Only bulk edit and board multi-select are inventoried so far; the dependencies of the earlier features are still to be listed.
+Upstream files the fork relies on without changing them. Only the LONESTONEP-5 features are inventoried so far; the dependencies of the earlier features are still to be listed.
 
 ### Bulk edit (LONESTONEP-5)
 
@@ -177,6 +189,14 @@ Upstream files the fork relies on without changing them. Only bulk edit and boar
 | `apps/web/core/components/core/multiple-select/select-group.tsx`         | `MultipleSelectGroup`                                                                                                   | `apps/web/oe/components/issues/board-selection/root.tsx`               |
 | `apps/web/core/components/core/multiple-select/entity-select-action.tsx` | `MultipleSelectEntityAction`                                                                                            | `apps/web/oe/components/issues/board-selection/card-selection.tsx`     |
 | `apps/web/core/components/issues/issue-layouts/kanban/block.tsx`         | DOM: the element rendered by `BoardCardSelection` sits directly in the card wrapper, which receives the touch listeners | `apps/web/oe/components/issues/board-selection/use-touch-selection.ts` |
+
+### End-to-end tests (LONESTONEP-5)
+
+| Upstream file                                                                                                       | What the fork relies on                                                                                                                                                                                  | Fork code                          |
+| ------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- |
+| `apps/web/core/components/issues/issue-layouts/list/block.tsx`, `spreadsheet/issue-row.tsx`, `kanban/block.tsx`     | `id="issue-<id>"` on each row and card, with its selection checkbox inside                                                                                                                               | `apps/web-e2e/tests/helpers/ui.ts` |
+| `apps/web/core/components/issues/peek-overview/`                                                                    | The "Work item title" text box of the peek overview                                                                                                                                                      | `apps/web-e2e/tests/helpers/ui.ts` |
+| `apps/web/app/(all)/[workspaceSlug]/(projects)/projects/(detail)/[projectId]/cycles/(detail)/`, `modules/(detail)/` | Sidebar toggle (a `PanelRight` icon button, no accessible name), `cycle_sidebar_collapsed` (boolean) and `module_sidebar_collapsed` (string) in local storage, "completed/total" progress in the sidebar | `apps/web-e2e/tests/views.spec.ts` |
 
 ## Features not in Plane
 

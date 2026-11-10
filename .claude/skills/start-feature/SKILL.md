@@ -37,7 +37,7 @@ Report to the user the upstream files the feature would modify, and the upstream
 
 ## 5. Recall the rules for the rest of the work
 
-Point to "Keeping upstream changes minimal" in `docs/architecture/fork-maintenance.md` and its checklist before opening a pull request. If the user works with Spec Kit locally, continue with `/speckit-specify`.
+Point to "Keeping upstream changes minimal" and "Testing" in `docs/architecture/fork-maintenance.md`, and to its checklist before opening a pull request. If the user works with Spec Kit locally, continue with `/speckit-specify`.
 
 ## Output
 
