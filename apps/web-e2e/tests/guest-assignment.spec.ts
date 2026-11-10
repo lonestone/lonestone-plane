@@ -5,7 +5,14 @@
  */
 
 import { createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
-import { addProjectMember, ROLE, setGuestAccess, setGuestCollaboration, updateWorkItem } from "./helpers/plane";
+import {
+  addProjectMember,
+  getProject,
+  ROLE,
+  setGuestAccess,
+  setGuestCollaboration,
+  updateWorkItem,
+} from "./helpers/plane";
 import { projectIssuesUrl } from "./helpers/urls";
 
 // LONESTONEP-4: on a project that allows guests to collaborate and has Guest access on, guests can
@@ -117,4 +124,89 @@ test("guests stay out of the assignees without collaboration, and out of the lea
   await expect(page.getByRole("option").first()).toBeVisible();
   await expect(guestOption).toHaveCount(0);
   await guestContext.close();
+});
+
+test.describe("Guest access off: a guest is shown but cannot be assigned yet", () => {
+  test("an admin turns Guest access on from the explanation and assigns the guest", async ({
+    page,
+    browser,
+    project,
+  }) => {
+    const guestContext = await browser.newContext();
+    const guest = await addProjectMember(
+      project.session,
+      guestContext.request,
+      project.workspaceSlug,
+      project.projectId,
+      ROLE.guest
+    );
+    await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
+    await setGuestAccess(project.session, project.workspaceSlug, project.projectId, false);
+    const [workItem] = await createWorkItems(project, ["Send the invoice"]);
+
+    await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+    const guestOption = page.getByRole("option", { name: new RegExp(`${guest.displayName} · Guest$`) });
+    const dialog = page.getByRole("dialog");
+    await page.getByRole("button", { name: "Add assignees" }).first().click();
+    await guestOption.click();
+
+    // the guest is not assigned: a dialog explains why
+    await expect(dialog.getByText("This guest can't see the work item yet")).toBeVisible();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    expect((await fetchWorkItem(project, workItem)).assignee_ids).toEqual([]);
+    expect((await getProject(project.session, project.workspaceSlug, project.projectId)).guest_view_all_features).toBe(
+      false
+    );
+
+    // the admin turns Guest access on and assigns in one go
+    if (!(await guestOption.isVisible())) await page.getByRole("button", { name: "Add assignees" }).first().click();
+    await guestOption.click();
+    await dialog.getByRole("button", { name: "Turn on Guest access and assign" }).click();
+    await expect(dialog).toBeHidden();
+    await expect.poll(async () => (await fetchWorkItem(project, workItem)).assignee_ids).toEqual([guest.id]);
+    expect((await getProject(project.session, project.workspaceSlug, project.projectId)).guest_view_all_features).toBe(
+      true
+    );
+    await guestContext.close();
+  });
+
+  test("a member who is not admin is asked to contact an admin, and nothing changes", async ({ browser, project }) => {
+    const guestContext = await browser.newContext();
+    const guest = await addProjectMember(
+      project.session,
+      guestContext.request,
+      project.workspaceSlug,
+      project.projectId,
+      ROLE.guest
+    );
+    const memberContext = await browser.newContext();
+    await addProjectMember(
+      project.session,
+      memberContext.request,
+      project.workspaceSlug,
+      project.projectId,
+      ROLE.member
+    );
+    await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
+    await setGuestAccess(project.session, project.workspaceSlug, project.projectId, false);
+    const [workItem] = await createWorkItems(project, ["Book the room"]);
+
+    const memberPage = await memberContext.newPage();
+    await memberPage.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+    await memberPage.getByRole("button", { name: "Add assignees" }).first().click();
+    await memberPage.getByRole("option", { name: new RegExp(`${guest.displayName} · Guest$`) }).click();
+
+    const dialog = memberPage.getByRole("dialog");
+    await expect(dialog.getByText("Ask a project admin to turn on Guest access")).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Turn on Guest access and assign" })).toHaveCount(0);
+    await dialog.getByRole("button", { name: "Close" }).click();
+    await expect(dialog).toBeHidden();
+    expect((await fetchWorkItem(project, workItem)).assignee_ids).toEqual([]);
+    expect((await getProject(project.session, project.workspaceSlug, project.projectId)).guest_view_all_features).toBe(
+      false
+    );
+    await guestContext.close();
+    await memberContext.close();
+  });
 });
