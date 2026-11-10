@@ -84,3 +84,13 @@ class TestAssignableMemberIds:
         second = _make_user(workspace, project, 20)
         requested = [second.id, first.id, str(second.id)]
         assert assignable_member_ids(project.id, requested) == [str(second.id), str(first.id)]
+
+    def test_current_assignee_who_left_the_project_is_dropped(self, workspace, project):
+        member = _make_user(workspace, project, 15)
+        former = _make_user(workspace, project, 15, is_active=False)
+        assert assignable_member_ids(project.id, [former.id, member.id], current_ids=[former.id]) == [str(member.id)]
+
+    def test_current_assignee_of_another_project_is_dropped(self, workspace, project, create_user):
+        other = _make_project(workspace, create_user, "OTH")
+        outsider = _make_user(workspace, other, 15)
+        assert assignable_member_ids(project.id, [outsider.id], current_ids=[outsider.id]) == []

@@ -10,7 +10,7 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import DraftIssueAssignee, Issue, IssueAssignee, Project, State
+from plane.db.models import DraftIssueAssignee, Issue, IssueAssignee, Project, ProjectMember, State
 from plane.extended.models import ProjectGuestCollaboration
 from plane.tests.factories import ProjectFactory, ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
 
@@ -144,6 +144,12 @@ class TestUpdateWithGuestAssignee:
 
         self._patch(session_client, workspace, project, issue, [str(member.id)])
         assert _assignee_ids(issue.id) == {member.id}
+
+    def test_assignee_who_left_the_project_is_dropped(self, session_client, workspace, project, issue, member):
+        self._patch(session_client, workspace, project, issue, [str(member.id)])
+        ProjectMember.objects.filter(project=project, member=member).update(is_active=False)
+        self._patch(session_client, workspace, project, issue, [str(member.id)])
+        assert _assignee_ids(issue.id) == set()
 
     def test_collaborating_guest_assigns_with_the_same_rule(
         self, guest_client, workspace, project, issue, member, guest

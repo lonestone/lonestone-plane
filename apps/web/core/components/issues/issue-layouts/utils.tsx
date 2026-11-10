@@ -53,7 +53,7 @@ import { renderFormattedDate, getFileURL } from "@plane/utils";
 import { store } from "@/lib/store-context";
 import { ISSUE_FILTER_DEFAULT_DATA } from "@/store/issue/helpers/base-issues.store";
 import { DEFAULT_DISPLAY_PROPERTIES } from "@/store/issue/issue-details/sub_issues_filter.store";
-import { includeGuestAssignees } from "@/plane-web/components/issues/guest-assignment";
+import { guestsAreAssignable } from "@/plane-web/components/issues/guest-assignment";
 // constants
 import { ISSUE_GROUP_BY_OPTIONS } from "@plane/constants";
 // components
@@ -820,7 +820,7 @@ export const getScopeMemberIds = ({ isWorkspaceLevel, projectId }: TGetColumns):
   if (projectId || (projectMemberIds && projectMemberIds.length > 0)) {
     const { getProjectMemberIds } = store.memberRoot.project;
     const _projectMemberIds = projectId
-      ? getProjectMemberIds(projectId, includeGuestAssignees(projectId))
+      ? getProjectMemberIds(projectId, guestsAreAssignable(projectId))
       : projectMemberIds;
     return {
       memberIds: _projectMemberIds ?? [],

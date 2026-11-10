@@ -39,8 +39,9 @@ def assignable_member_ids(
 ) -> list[str]:
     """Keep the requested ids that may be assigned, in the requested order.
 
-    ``current_ids`` are the work item's assignees before the change: they stay assignable, so that
-    editing the other assignees never drops a guest assigned before collaboration was turned off.
+    ``current_ids`` are the work item's assignees before the change: those still active in the project
+    stay assignable, so that editing the other assignees never drops a guest assigned before
+    collaboration was turned off.
     """
     requested = [str(member_id) for member_id in member_ids]
     if not requested:
@@ -51,7 +52,16 @@ def assignable_member_ids(
         project_id=project_id, is_active=True, member_id__in=requested, role__gte=min_role
     )
     eligible = {str(member_id) for member_id in members.values_list("member_id", flat=True)}
-    eligible.update(str(member_id) for member_id in current_ids)
+    # Current assignees stay assignable only while they are active members of the project (any role):
+    # someone who left the project is dropped, as upstream does.
+    current = [str(member_id) for member_id in current_ids]
+    if current:
+        eligible.update(
+            str(member_id)
+            for member_id in ProjectMember.objects.filter(
+                project_id=project_id, is_active=True, member_id__in=current
+            ).values_list("member_id", flat=True)
+        )
 
     kept: list[str] = []
     for member_id in requested:

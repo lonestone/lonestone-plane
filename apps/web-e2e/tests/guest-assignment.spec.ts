@@ -218,7 +218,8 @@ test("guests are assigned from the bulk actions bar and get their own column whe
     await expect.poll(async () => (await fetchWorkItem(project, item)).assignee_ids).toEqual([guest.id]);
   }
 
-  // grouping by assignees: the guest has a column with both work items
+  // grouping by assignees: the guest has a column with both work items (the main boards already list
+  // every project member, guests included, as columns: upstream behaviour)
   await setProjectLayout(project.session, project.workspaceSlug, project.projectId, {
     layout: "kanban",
     group_by: "assignees",
