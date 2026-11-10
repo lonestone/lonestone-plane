@@ -27,8 +27,9 @@ from django.utils import timezone
 
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.webhook_task import model_activity
-from plane.db.models import Issue, IssueAssignee, IssueLabel, Label, Module, ModuleIssue, ProjectMember, State
+from plane.db.models import Issue, IssueAssignee, IssueLabel, Label, Module, ModuleIssue, State
 from plane.db.models.state import StateGroup
+from plane.extended.rules.guest_assignment import assignable_member_ids
 from plane.extended.serializers.issue_bulk_update import BulkUpdateValidationError
 
 
@@ -286,19 +287,11 @@ class AssigneesHandler(_AddLinksHandler):
 
     def validate(self, value, *, project_id, slug):
         user_ids = _parse_uuid_list(value)
-        eligible = {
-            str(member_id)
-            for member_id in ProjectMember.objects.filter(
-                project_id=project_id,
-                workspace__slug=slug,
-                member_id__in=user_ids,
-                is_active=True,
-                role__gte=15,
-            ).values_list("member_id", flat=True)
-        }
-        if len(eligible) != len(user_ids):
+        # Members, plus guests when the project allows guests to collaborate and has Guest access on.
+        eligible = set(assignable_member_ids(project_id, user_ids))
+        if len(eligible) != len(set(user_ids)):
             raise BulkUpdateValidationError(
-                "assignee_not_eligible", "Assignees must be active project members with at least the member role"
+                "assignee_not_eligible", "Assignees must be active project members who can be assigned"
             )
         return user_ids
 

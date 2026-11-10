@@ -442,6 +442,20 @@ class TestBulkUpdateAssignees:
         assert not IssueAssignee.objects.filter(assignee=user).exists()
 
     @pytest.mark.django_db
+    def test_guest_is_accepted_with_collaboration_and_guest_access(
+        self, session_client, workspace, project, issues, guest, tasks
+    ):
+        ProjectGuestCollaboration.objects.create(project=project, guest_can_collaborate=True)
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+        response = session_client.post(
+            _url(workspace, project.id),
+            {"issue_ids": _ids(issues), "properties": {"assignee_ids": [str(guest.id)]}},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert all(_assignee_ids(issue) == {guest.id} for issue in issues)
+
+    @pytest.mark.django_db
     def test_empty_assignees_is_invalid(self, session_client, workspace, project, issues):
         response = session_client.post(
             _url(workspace, project.id),

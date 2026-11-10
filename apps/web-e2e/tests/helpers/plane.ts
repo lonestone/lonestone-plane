@@ -58,18 +58,31 @@ async function call<T>(
   return (response.status() === 204 ? undefined : await response.json()) as T;
 }
 
+function randomByte(): number {
+  return Math.floor(Math.random() * 254) + 1;
+}
+
+function fakeClientAddress(): string {
+  return `10.${randomByte()}.${randomByte()}.${randomByte()}`;
+}
+
 /**
  * Signs up a brand-new user through the real email/password flow, then marks it onboarded so
  * the web app lands on the requested page instead of the onboarding wizard. A fresh user per
  * test keeps tests independent from whatever already lives in the dev database.
  */
 export async function signUpFreshUser(request: APIRequestContext): Promise<PlaneSession> {
-  const csrfResponse = await request.get(`${API_URL}/auth/get-csrf-token/`);
+  // Anonymous API calls (the CSRF token) are throttled per client address at 30/minute
+  // (REST_FRAMEWORK "anon" rate, not configurable): a full run signs up more users than that.
+  // DRF reads the address from X-Forwarded-For, so each sign-up gets its own.
+  const headers = { "X-Forwarded-For": fakeClientAddress() };
+  const csrfResponse = await request.get(`${API_URL}/auth/get-csrf-token/`, { headers });
   const { csrf_token: csrfToken } = (await csrfResponse.json()) as { csrf_token: string };
 
   const email = `web-e2e-${uniqueSuffix()}@example.com`;
   const signUp = await request.post(`${API_URL}/auth/sign-up/`, {
     form: { email, password: `E2e-${randomUUID()}!`, csrfmiddlewaretoken: csrfToken },
+    headers,
     maxRedirects: 0,
   });
   // The auth views always redirect; errors are reported as query params on the redirect URL.
@@ -273,4 +286,37 @@ export async function listAttachments(
     "GET",
     `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/attachments/`
   );
+}
+
+/** "Allow guests to collaborate" (fork setting): guests edit work items and use cycles and modules. */
+export async function setGuestCollaboration(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  enabled: boolean
+): Promise<void> {
+  await call(session, "PATCH", `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/guest-collaboration/`, {
+    guest_can_collaborate: enabled,
+  });
+}
+
+/** "Guest access" (upstream setting): guests see every work item of the project. */
+export async function setGuestAccess(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  enabled: boolean
+): Promise<void> {
+  await call(session, "PATCH", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`, {
+    guest_view_all_features: enabled,
+  });
+}
+
+/** Reads the project settings the guest assignment depends on. */
+export async function getProject(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string
+): Promise<{ id: string; guest_view_all_features: boolean }> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`);
 }

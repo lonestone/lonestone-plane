@@ -13,6 +13,7 @@ import type { TPowerKPageType } from "@/components/power-k/core/types";
 // hooks
 import { useIssueDetail } from "@/hooks/store/use-issue-detail";
 import { useMember } from "@/hooks/store/use-member";
+import { guestsAreAssignable } from "@/plane-web/components/issues/guest-assignment";
 // local imports
 import { PowerKMembersMenu } from "../../../../menus/members";
 import { PowerKWorkItemCyclesMenu } from "./cycles-menu";
@@ -41,7 +42,9 @@ export const PowerKWorkItemContextBasedPages = observer(function PowerKWorkItemC
   // derived values
   const entityId = entityIdentifier ? getIssueIdByIdentifier(entityIdentifier.toString()) : null;
   const entityDetails = entityId ? getIssueById(entityId) : null;
-  const projectMemberIds = entityDetails?.project_id ? getProjectMemberIds(entityDetails.project_id, false) : [];
+  const projectMemberIds = entityDetails?.project_id
+    ? getProjectMemberIds(entityDetails.project_id, guestsAreAssignable(entityDetails.project_id))
+    : [];
 
   if (!entityDetails) return null;
 
