@@ -4,8 +4,8 @@
 
 """Who can be assigned to a work item (LONESTONEP-4).
 
-Kept out of ``plane.extended.services``: upstream serializers import this module, and the services
-package imports bgtasks that import those serializers back (circular import). Only models here.
+Kept out of ``plane.extended.services``: upstream serializers import this module, and importing the
+services package loads bgtasks that import those serializers back (circular import).
 
 Upstream only accepts active project members with at least the member role. The fork also
 accepts active guests when the project allows guests to collaborate and has "Guest access"
@@ -17,19 +17,19 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
-from plane.db.models import IssueAssignee, Project, ProjectMember
-from plane.extended.models import ProjectGuestCollaboration
-
-GUEST_ROLE = 5
-MEMBER_ROLE = 15
+from plane.app.permissions.base import ROLE
+from plane.db.models import DraftIssue, DraftIssueAssignee, IssueAssignee, Project, ProjectMember
 
 
 def guests_are_assignable(project_id: UUID | str) -> bool:
     """True when the project lets its guests be assigned to work items."""
-    collaborates = ProjectGuestCollaboration.objects.filter(
-        project_id=project_id, guest_can_collaborate=True, deleted_at__isnull=True
-    ).exists()
-    return collaborates and Project.objects.filter(pk=project_id, guest_view_all_features=True).exists()
+    # Imported here, as in plane.app.permissions.base: the services package must not load with this module.
+    from plane.extended.services.guest_collaboration import guest_can_collaborate
+
+    return (
+        guest_can_collaborate(project_id)
+        and Project.objects.filter(pk=project_id, guest_view_all_features=True).exists()
+    )
 
 
 def assignable_member_ids(
@@ -46,11 +46,10 @@ def assignable_member_ids(
     if not requested:
         return []
 
-    members = ProjectMember.objects.filter(project_id=project_id, is_active=True, member_id__in=requested)
-    if guests_are_assignable(project_id):
-        members = members.filter(role__gte=GUEST_ROLE)
-    else:
-        members = members.filter(role__gte=MEMBER_ROLE)
+    min_role = ROLE.GUEST.value if guests_are_assignable(project_id) else ROLE.MEMBER.value
+    members = ProjectMember.objects.filter(
+        project_id=project_id, is_active=True, member_id__in=requested, role__gte=min_role
+    )
     eligible = {str(member_id) for member_id in members.values_list("member_id", flat=True)}
     eligible.update(str(member_id) for member_id in current_ids)
 
@@ -61,21 +60,17 @@ def assignable_member_ids(
     return kept
 
 
-def _ids(users_or_ids: Iterable) -> list[str]:
-    return [str(getattr(item, "id", item)) for item in users_or_ids]
+def assignable_assignee_ids(project_id: UUID | str, requested: Iterable, instance=None) -> list[str]:
+    """``assignable_member_ids`` for the work item and draft serializers.
 
-
-def assignable_issue_assignee_ids(project_id: UUID | str, requested: Iterable, issue=None) -> list[str]:
-    """``assignable_member_ids`` for ``IssueCreateSerializer``: users or ids in, the issue's current assignees kept."""
-    current = IssueAssignee.objects.filter(issue=issue).values_list("assignee_id", flat=True) if issue else ()
-    return assignable_member_ids(project_id, _ids(requested), current_ids=current)
-
-
-def assignable_draft_assignee_ids(project_id: UUID | str, requested: Iterable, draft=None) -> list[str]:
-    """``assignable_member_ids`` for ``DraftIssueCreateSerializer``: the draft's current assignees kept."""
-    from plane.db.models import DraftIssueAssignee
-
-    current = (
-        DraftIssueAssignee.objects.filter(draft_issue=draft).values_list("assignee_id", flat=True) if draft else ()
-    )
-    return assignable_member_ids(project_id, _ids(requested), current_ids=current)
+    ``requested`` holds ``User`` objects (the serializers' ``assignee_ids`` field) or ids; ``instance`` is
+    the work item or draft being updated (``None`` on create), whose current assignees stay assignable.
+    """
+    if isinstance(instance, DraftIssue):
+        current = DraftIssueAssignee.objects.filter(draft_issue=instance).values_list("assignee_id", flat=True)
+    elif instance is not None:
+        current = IssueAssignee.objects.filter(issue=instance).values_list("assignee_id", flat=True)
+    else:
+        current = ()
+    ids = [getattr(item, "id", item) for item in requested]
+    return assignable_member_ids(project_id, ids, current_ids=current)

@@ -6,5 +6,5 @@
 
 export * from "./access-modal";
 export * from "./helpers";
-export * from "./use-guard";
+export * from "./use-guest-assignee-dropdown";
 export * from "./use-guest-user-details";

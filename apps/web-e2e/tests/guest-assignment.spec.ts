@@ -4,7 +4,9 @@
  * See the LICENSE file for details.
  */
 
+import type { Browser, BrowserContext } from "@playwright/test";
 import { createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
+import type { ProjectFixture } from "./fixtures";
 import {
   addProjectMember,
   getProject,
@@ -15,12 +17,17 @@ import {
   updateWorkItem,
 } from "./helpers/plane";
 import { barButton, bulkBar, toggleWorkItem } from "./helpers/ui";
-import { projectIssuesUrl } from "./helpers/urls";
+import { projectIssuesUrl, workItemUrl } from "./helpers/urls";
 
 // LONESTONEP-4: on a project that allows guests to collaborate and has Guest access on, guests can
 // be assigned to work items. They read "Name · Guest" in the assignee lists.
 
-test("a guest is offered in the assignees and can be assigned", async ({ page, browser, project }) => {
+/** Adds a guest to the fixture project (in their own browser context), then sets the two project settings. */
+async function addGuest(
+  browser: Browser,
+  project: ProjectFixture,
+  settings: { collaboration: boolean; guestAccess: boolean }
+): Promise<{ guest: { id: string; displayName: string }; guestContext: BrowserContext }> {
   const guestContext = await browser.newContext();
   const guest = await addProjectMember(
     project.session,
@@ -29,6 +36,13 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
     project.projectId,
     ROLE.guest
   );
+  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, settings.collaboration);
+  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, settings.guestAccess);
+  return { guest, guestContext };
+}
+
+test("a guest is offered in the assignees and can be assigned", async ({ page, browser, project }) => {
+  const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: true });
   const member = await addProjectMember(
     project.session,
     (await browser.newContext()).request,
@@ -36,11 +50,9 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
     project.projectId,
     ROLE.member
   );
-  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
-  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
   const [workItem] = await createWorkItems(project, ["Review the quote"]);
 
-  await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+  await page.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
   await page.getByRole("button", { name: "Add assignees" }).first().click();
 
   // the guest is listed with the "Guest" label; members are not
@@ -60,16 +72,7 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
 
 // Plane keeps "Your work" to workspace admins and members: a guest finds their work items in the project.
 test("an assigned guest finds the work item in the project, opens and comments it", async ({ browser, project }) => {
-  const guestContext = await browser.newContext();
-  const guest = await addProjectMember(
-    project.session,
-    guestContext.request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.guest
-  );
-  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
-  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: true });
   // created by the owner, not by the guest
   const [workItem] = await createWorkItems(project, ["Validate the mockups"]);
   await updateWorkItem(project.session, project.workspaceSlug, project.projectId, workItem.id, {
@@ -83,7 +86,8 @@ test("an assigned guest finds the work item in the project, opens and comments i
   await expect(guestPage.getByRole("textbox", { name: "Work item title" })).toHaveValue("Validate the mockups", {
     timeout: 30_000,
   });
-  // the comment editor has no accessible name: its "Add comment" text is a placeholder
+  // the comment editor has no accessible name (its "Add comment" text is a placeholder): located by
+  // its contenteditable, listed under "Upstream dependencies" in FORK_CHANGELOG.md
   await guestPage.locator('[contenteditable="true"]').last().click();
   await guestPage.keyboard.type("Looks good to me");
   await guestPage.getByRole("button", { name: "Comment", exact: true }).click();
@@ -96,20 +100,12 @@ test("guests stay out of the assignees without collaboration, and out of the lea
   browser,
   project,
 }) => {
-  const guestContext = await browser.newContext();
-  const guest = await addProjectMember(
-    project.session,
-    guestContext.request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.guest
-  );
-  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  const { guest, guestContext } = await addGuest(browser, project, { collaboration: false, guestAccess: true });
   const [workItem] = await createWorkItems(project, ["Internal task"]);
   const guestOption = page.getByRole("option", { name: new RegExp(guest.displayName) });
 
   // no collaboration: the assignees are the members only
-  await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+  await page.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
   await page.getByRole("button", { name: "Add assignees" }).first().click();
   await expect(page.getByRole("option").first()).toBeVisible();
   await expect(guestOption).toHaveCount(0);
@@ -134,19 +130,10 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
     browser,
     project,
   }) => {
-    const guestContext = await browser.newContext();
-    const guest = await addProjectMember(
-      project.session,
-      guestContext.request,
-      project.workspaceSlug,
-      project.projectId,
-      ROLE.guest
-    );
-    await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
-    await setGuestAccess(project.session, project.workspaceSlug, project.projectId, false);
+    const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: false });
     const [workItem] = await createWorkItems(project, ["Send the invoice"]);
 
-    await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+    await page.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
     const guestOption = page.getByRole("option", { name: new RegExp(`${guest.displayName} · Guest$`) });
     const dialog = page.getByRole("dialog");
     await page.getByRole("button", { name: "Add assignees" }).first().click();
@@ -161,8 +148,10 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
       false
     );
 
+    // closing the dialog also closes the assignee list: the admin reopens it and picks the guest again
+    await expect(guestOption).toBeHidden();
+    await page.getByRole("button", { name: "Add assignees" }).first().click();
     // the admin turns Guest access on and assigns in one go
-    if (!(await guestOption.isVisible())) await page.getByRole("button", { name: "Add assignees" }).first().click();
     await guestOption.click();
     await dialog.getByRole("button", { name: "Turn on Guest access and assign" }).click();
     await expect(dialog).toBeHidden();
@@ -174,14 +163,7 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
   });
 
   test("a member who is not admin is asked to contact an admin, and nothing changes", async ({ browser, project }) => {
-    const guestContext = await browser.newContext();
-    const guest = await addProjectMember(
-      project.session,
-      guestContext.request,
-      project.workspaceSlug,
-      project.projectId,
-      ROLE.guest
-    );
+    const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: false });
     const memberContext = await browser.newContext();
     await addProjectMember(
       project.session,
@@ -190,12 +172,10 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
       project.projectId,
       ROLE.member
     );
-    await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
-    await setGuestAccess(project.session, project.workspaceSlug, project.projectId, false);
     const [workItem] = await createWorkItems(project, ["Book the room"]);
 
     const memberPage = await memberContext.newPage();
-    await memberPage.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+    await memberPage.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
     await memberPage.getByRole("button", { name: "Add assignees" }).first().click();
     await memberPage.getByRole("option", { name: new RegExp(`${guest.displayName} · Guest$`) }).click();
 
@@ -218,16 +198,7 @@ test("guests are assigned from the bulk actions bar and get their own column whe
   browser,
   project,
 }) => {
-  const guestContext = await browser.newContext();
-  const guest = await addProjectMember(
-    project.session,
-    guestContext.request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.guest
-  );
-  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
-  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: true });
   const items = await createWorkItems(project, ["Kickoff deck", "Budget sheet"]);
 
   // bulk actions bar: the guest is offered and assigned to every selected work item

@@ -10,7 +10,7 @@ import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { TOAST_TYPE, setToast } from "@plane/propel/toast";
-import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { AlertModalCore, EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
 
@@ -25,7 +25,8 @@ type Props = {
 
 /**
  * Explains why a guest cannot be assigned while "Guest access" is off. A project admin can turn it on
- * from here (the same project update as the project settings) and assign the guest in one go.
+ * from here (the same project update as the project settings) and assign the guest in one go; other
+ * members can only close it.
  */
 export const GuestAccessModal = observer(function GuestAccessModal(props: Props) {
   const { isOpen, workspaceSlug, projectId, onClose, onEnabled } = props;
@@ -34,6 +35,7 @@ export const GuestAccessModal = observer(function GuestAccessModal(props: Props)
   const { updateProject } = useProject();
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const title = t("bulk_operations.guest_assignment.modal_title");
   const isAdmin =
     !!workspaceSlug &&
     !!projectId &&
@@ -52,35 +54,35 @@ export const GuestAccessModal = observer(function GuestAccessModal(props: Props)
     }
   };
 
+  if (isAdmin)
+    return (
+      <AlertModalCore
+        isOpen={isOpen}
+        handleClose={onClose}
+        handleSubmit={enableAndAssign}
+        isSubmitting={isSubmitting}
+        variant="primary"
+        title={title}
+        content={t("bulk_operations.guest_assignment.modal_body")}
+        primaryButtonText={{
+          loading: t("bulk_operations.guest_assignment.enable_and_assign"),
+          default: t("bulk_operations.guest_assignment.enable_and_assign"),
+        }}
+        secondaryButtonText={t("cancel")}
+      />
+    );
+
+  // AlertModalCore always has a primary action: members only get an explanation and a Close button.
   return (
     <ModalCore isOpen={isOpen} handleClose={onClose} position={EModalPosition.CENTER} width={EModalWidth.XL}>
-      <div className="px-4 py-4">
-        <h3 className="text-16 leading-6 font-medium text-primary">
-          {t("bulk_operations.guest_assignment.modal_title")}
-        </h3>
-        <p className="my-4 text-13 text-secondary">
-          {t(
-            isAdmin
-              ? "bulk_operations.guest_assignment.modal_body"
-              : "bulk_operations.guest_assignment.modal_body_member"
-          )}
-        </p>
+      <div className="p-5">
+        <h3 className="text-16 font-medium">{title}</h3>
+        <p className="mt-1 text-13 text-secondary">{t("bulk_operations.guest_assignment.modal_body_member")}</p>
       </div>
-      <div className="flex items-center justify-end gap-2 border-t-[0.5px] border-subtle px-4 py-4">
-        {isAdmin ? (
-          <>
-            <Button type="button" variant="secondary" size="lg" onClick={onClose}>
-              {t("bulk_operations.guest_assignment.cancel")}
-            </Button>
-            <Button type="button" variant="primary" size="lg" disabled={isSubmitting} onClick={enableAndAssign}>
-              {t("bulk_operations.guest_assignment.enable_and_assign")}
-            </Button>
-          </>
-        ) : (
-          <Button type="button" variant="secondary" size="lg" onClick={onClose}>
-            {t("bulk_operations.guest_assignment.close")}
-          </Button>
-        )}
+      <div className="flex justify-end border-t-[0.5px] border-subtle px-5 py-4">
+        <Button variant="secondary" onClick={onClose}>
+          {t("close")}
+        </Button>
       </div>
     </ModalCore>
   );

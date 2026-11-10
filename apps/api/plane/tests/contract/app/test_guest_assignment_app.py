@@ -10,17 +10,9 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import (
-    DraftIssueAssignee,
-    Issue,
-    IssueAssignee,
-    Project,
-    ProjectMember,
-    State,
-    User,
-    WorkspaceMember,
-)
+from plane.db.models import DraftIssueAssignee, Issue, IssueAssignee, Project, State
 from plane.extended.models import ProjectGuestCollaboration
+from plane.tests.factories import ProjectFactory, ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
 
 ISSUES_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/"
 ISSUE_DETAIL_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/{pk}/"
@@ -28,8 +20,8 @@ DRAFTS_URL = "/api/workspaces/{slug}/draft-issues/"
 
 
 def _make_project(workspace, owner, identifier):
-    project = Project.objects.create(name=identifier, identifier=identifier, workspace=workspace, created_by=owner)
-    ProjectMember.objects.create(project=project, member=owner, workspace=workspace, role=20)
+    project = ProjectFactory(name=identifier, identifier=identifier, workspace=workspace, created_by=owner)
+    ProjectMemberFactory(project=project, member=owner, workspace=workspace, role=20)
     State.objects.create(
         name="Backlog",
         color="#000000",
@@ -43,11 +35,10 @@ def _make_project(workspace, owner, identifier):
     return project
 
 
-def _make_user(workspace, project, prefix, role):
-    unique_id = uuid4().hex[:8]
-    user = User.objects.create(email=f"{prefix}-{unique_id}@plane.so", username=f"{prefix}_{unique_id}")
-    WorkspaceMember.objects.create(workspace=workspace, member=user, role=role)
-    ProjectMember.objects.create(project=project, member=user, workspace=workspace, role=role)
+def _make_user(workspace, project, role):
+    user = UserFactory(username=uuid4().hex)  # the factory leaves the unique username empty
+    WorkspaceMemberFactory(workspace=workspace, member=user, role=role)
+    ProjectMemberFactory(project=project, member=user, workspace=workspace, role=role)
     return user
 
 
@@ -69,12 +60,12 @@ def project(db, workspace, create_user):
 
 @pytest.fixture
 def member(db, workspace, project):
-    return _make_user(workspace, project, "member", 15)
+    return _make_user(workspace, project, 15)
 
 
 @pytest.fixture
 def guest(db, workspace, project):
-    return _make_user(workspace, project, "guest", 5)
+    return _make_user(workspace, project, 5)
 
 
 @pytest.fixture
@@ -163,7 +154,7 @@ class TestUpdateWithGuestAssignee:
 
     def test_guest_of_another_project_is_never_assigned(self, session_client, workspace, project, issue, create_user):
         other = _make_project(workspace, create_user, "OTH")
-        foreign_guest = _make_user(workspace, other, "foreign", 5)
+        foreign_guest = _make_user(workspace, other, 5)
         _configure(project, collaboration=True, guest_access=True)
         self._patch(session_client, workspace, project, issue, [str(foreign_guest.id)])
         assert _assignee_ids(issue.id) == set()

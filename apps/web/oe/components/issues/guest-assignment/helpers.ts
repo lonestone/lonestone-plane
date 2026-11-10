@@ -6,12 +6,14 @@
 
 // Guest assignment (LONESTONEP-4): guests of a project that allows guests to collaborate can be
 // assigned to work items, once the project also has "Guest access" (guest_view_all_features) on.
-// The server applies the same rule (plane.extended.services.guest_assignment).
+// The server applies the same rule (plane.extended.rules.guest_assignment).
 //
 // Plain functions over the root store, so that non-React upstream code (issue-layouts/utils.tsx)
-// can call them too. They read `projectMemberMap` (role of each membership, as `getProjectMemberIds`
-// does) and the project's `guest_can_collaborate` / `guest_view_all_features`: re-check these on the
-// next upstream merge.
+// can call them too. The `guest_can_collaborate` read mirrors `isCollaboratingGuest` in
+// core/hooks/use-project-collaboration.ts, a hook that non-React code cannot call: keep both in step.
+// They read `projectMemberMap` (role of each membership, as `getProjectMemberIds` does) and the
+// project's `guest_can_collaborate` / `guest_view_all_features`: re-check these on the next upstream
+// merge.
 
 import { EUserPermissions } from "@plane/constants";
 import { store } from "@/lib/store-context";

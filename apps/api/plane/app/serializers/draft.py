@@ -26,7 +26,7 @@ from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
-from plane.extended.rules.guest_assignment import assignable_draft_assignee_ids
+from plane.extended.rules.guest_assignment import assignable_assignee_ids
 
 
 class DraftIssueCreateSerializer(BaseSerializer):
@@ -91,8 +91,8 @@ class DraftIssueCreateSerializer(BaseSerializer):
 
         # Validate assignees are from project
         if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = assignable_draft_assignee_ids(
-                self.context["project_id"], attrs["assignee_ids"], draft=self.instance
+            attrs["assignee_ids"] = assignable_assignee_ids(
+                self.context["project_id"], attrs["assignee_ids"], instance=self.instance
             )
 
         # Validate labels are from project

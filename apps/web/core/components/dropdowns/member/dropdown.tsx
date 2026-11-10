@@ -9,11 +9,7 @@ import { useParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
-import {
-  includeGuestAssignees,
-  useGuestAssignmentGuard,
-  useGuestUserDetails,
-} from "@/plane-web/components/issues/guest-assignment";
+import { useGuestAssigneeDropdown } from "@/plane-web/components/issues/guest-assignment";
 // local imports
 import { MemberDropdownBase } from "./base";
 import type { MemberDropdownProps } from "./types";
@@ -37,19 +33,12 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
     project: { getProjectMemberIds, fetchProjectMembers },
     workspace: { workspaceMemberIds },
   } = useMember();
-  const guestUserDetails = useGuestUserDetails(projectId, getUserDetails);
-  const { guardedOnChange, modal } = useGuestAssignmentGuard({
-    ...props,
-    projectId,
-    workspaceSlug: workspaceSlug?.toString(),
-    onChange: props.onChange,
-  });
-  const guardedProps = { ...props, onChange: guardedOnChange } as typeof props;
+  const guest = useGuestAssigneeDropdown(props, getUserDetails, workspaceSlug?.toString());
 
   const memberIds = propsMemberIds
     ? propsMemberIds
     : projectId
-      ? getProjectMemberIds(projectId, props.multiple && includeGuestAssignees(projectId))
+      ? getProjectMemberIds(projectId, guest.includeGuests)
       : workspaceMemberIds;
 
   const onDropdownOpen = () => {
@@ -59,12 +48,12 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
   return (
     <>
       <MemberDropdownBase
-        {...guardedProps}
-        getUserDetails={guestUserDetails}
+        {...guest.guestProps}
+        getUserDetails={guest.guestUserDetails}
         memberIds={memberIds ?? []}
         onDropdownOpen={onDropdownOpen}
       />
-      {modal}
+      {guest.guestModal}
     </>
   );
 });
