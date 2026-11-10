@@ -81,3 +81,40 @@ test("an assigned guest finds the work item in the project, opens and comments i
   await expect(guestPage.getByText("Looks good to me").first()).toBeVisible();
   await guestContext.close();
 });
+
+test("guests stay out of the assignees without collaboration, and out of the lead fields", async ({
+  page,
+  browser,
+  project,
+}) => {
+  const guestContext = await browser.newContext();
+  const guest = await addProjectMember(
+    project.session,
+    guestContext.request,
+    project.workspaceSlug,
+    project.projectId,
+    ROLE.guest
+  );
+  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  const [workItem] = await createWorkItems(project, ["Internal task"]);
+  const guestOption = page.getByRole("option", { name: new RegExp(guest.displayName) });
+
+  // no collaboration: the assignees are the members only
+  await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+  await page.getByRole("button", { name: "Add assignees" }).first().click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await expect(guestOption).toHaveCount(0);
+
+  // with collaboration, a lead is still a member
+  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
+  await page.goto(`/${project.workspaceSlug}/projects/${project.projectId}/modules`);
+  await page
+    .getByRole("button", { name: /add module|create module|new module/i })
+    .first()
+    .click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "Lead" }).first().click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await expect(guestOption).toHaveCount(0);
+  await guestContext.close();
+});

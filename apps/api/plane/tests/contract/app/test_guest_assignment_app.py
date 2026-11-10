@@ -126,6 +126,11 @@ class TestUpdateWithGuestAssignee:
         self._patch(session_client, workspace, project, issue, [str(member.id), str(guest.id)])
         assert _assignee_ids(issue.id) == {member.id}
 
+    def test_guest_is_dropped_without_collaboration(self, session_client, workspace, project, issue, member, guest):
+        _configure(project, collaboration=False, guest_access=True)
+        self._patch(session_client, workspace, project, issue, [str(member.id), str(guest.id)])
+        assert _assignee_ids(issue.id) == {member.id}
+
     def test_assigned_guest_is_kept_after_collaboration_is_turned_off(
         self, session_client, workspace, project, issue, member, guest
     ):
