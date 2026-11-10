@@ -5,7 +5,8 @@
  */
 
 import { createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
-import { addProjectMember, ROLE, setGuestAccess, setGuestCollaboration } from "./helpers/plane";
+import { addProjectMember, ROLE, setGuestAccess, setGuestCollaboration, updateWorkItem } from "./helpers/plane";
+import { projectIssuesUrl } from "./helpers/urls";
 
 // LONESTONEP-4: on a project that allows guests to collaborate and has Guest access on, guests can
 // be assigned to work items. They read "Name · Guest" in the assignee lists.
@@ -45,5 +46,38 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
   await expect.poll(async () => (await fetchWorkItem(project, workItem)).assignee_ids).toEqual([guest.id]);
   await page.reload();
   await expect(page.getByText(`${guest.displayName} · Guest`).first()).toBeVisible();
+  await guestContext.close();
+});
+
+// Plane keeps "Your work" to workspace admins and members: a guest finds their work items in the project.
+test("an assigned guest finds the work item in the project, opens and comments it", async ({ browser, project }) => {
+  const guestContext = await browser.newContext();
+  const guest = await addProjectMember(
+    project.session,
+    guestContext.request,
+    project.workspaceSlug,
+    project.projectId,
+    ROLE.guest
+  );
+  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
+  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  // created by the owner, not by the guest
+  const [workItem] = await createWorkItems(project, ["Validate the mockups"]);
+  await updateWorkItem(project.session, project.workspaceSlug, project.projectId, workItem.id, {
+    assignee_ids: [guest.id],
+  });
+
+  const guestPage = await guestContext.newPage();
+  await guestPage.goto(projectIssuesUrl(project.workspaceSlug, project.projectId));
+  await guestPage.getByText("Validate the mockups").first().click();
+
+  await expect(guestPage.getByRole("textbox", { name: "Work item title" })).toHaveValue("Validate the mockups", {
+    timeout: 30_000,
+  });
+  // the comment editor has no accessible name: its "Add comment" text is a placeholder
+  await guestPage.locator('[contenteditable="true"]').last().click();
+  await guestPage.keyboard.type("Looks good to me");
+  await guestPage.getByRole("button", { name: "Comment", exact: true }).click();
+  await expect(guestPage.getByText("Looks good to me").first()).toBeVisible();
   await guestContext.close();
 });
