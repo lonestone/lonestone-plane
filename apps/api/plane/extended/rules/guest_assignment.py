@@ -69,3 +69,13 @@ def assignable_issue_assignee_ids(project_id: UUID | str, requested: Iterable, i
     """``assignable_member_ids`` for ``IssueCreateSerializer``: users or ids in, the issue's current assignees kept."""
     current = IssueAssignee.objects.filter(issue=issue).values_list("assignee_id", flat=True) if issue else ()
     return assignable_member_ids(project_id, _ids(requested), current_ids=current)
+
+
+def assignable_draft_assignee_ids(project_id: UUID | str, requested: Iterable, draft=None) -> list[str]:
+    """``assignable_member_ids`` for ``DraftIssueCreateSerializer``: the draft's current assignees kept."""
+    from plane.db.models import DraftIssueAssignee
+
+    current = (
+        DraftIssueAssignee.objects.filter(draft_issue=draft).values_list("assignee_id", flat=True) if draft else ()
+    )
+    return assignable_member_ids(project_id, _ids(requested), current_ids=current)

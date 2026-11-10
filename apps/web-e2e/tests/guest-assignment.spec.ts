@@ -9,10 +9,12 @@ import {
   addProjectMember,
   getProject,
   ROLE,
+  setProjectLayout,
   setGuestAccess,
   setGuestCollaboration,
   updateWorkItem,
 } from "./helpers/plane";
+import { barButton, bulkBar, toggleWorkItem } from "./helpers/ui";
 import { projectIssuesUrl } from "./helpers/urls";
 
 // LONESTONEP-4: on a project that allows guests to collaborate and has Guest access on, guests can
@@ -209,4 +211,53 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
     await guestContext.close();
     await memberContext.close();
   });
+});
+
+test("guests are assigned from the bulk actions bar and get their own column when grouping by assignees", async ({
+  page,
+  browser,
+  project,
+}) => {
+  const guestContext = await browser.newContext();
+  const guest = await addProjectMember(
+    project.session,
+    guestContext.request,
+    project.workspaceSlug,
+    project.projectId,
+    ROLE.guest
+  );
+  await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, true);
+  await setGuestAccess(project.session, project.workspaceSlug, project.projectId, true);
+  const items = await createWorkItems(project, ["Kickoff deck", "Budget sheet"]);
+
+  // bulk actions bar: the guest is offered and assigned to every selected work item
+  await page.goto(projectIssuesUrl(project.workspaceSlug, project.projectId));
+  for (const item of items) {
+    // oxlint-disable-next-line no-await-in-loop
+    await toggleWorkItem(page, item.id);
+  }
+  await expect(bulkBar(page)).toContainText("2 selected");
+  await barButton(page, "Assignees").click();
+  await page
+    .getByRole("menu", { name: "Assignees" })
+    .getByRole("menuitemcheckbox", { name: new RegExp(`${guest.displayName} · Guest`) })
+    .click();
+  for (const item of items) {
+    // oxlint-disable-next-line no-await-in-loop
+    await expect.poll(async () => (await fetchWorkItem(project, item)).assignee_ids).toEqual([guest.id]);
+  }
+
+  // grouping by assignees: the guest has a column with both work items
+  await setProjectLayout(project.session, project.workspaceSlug, project.projectId, {
+    layout: "kanban",
+    group_by: "assignees",
+  });
+  await page.goto(projectIssuesUrl(project.workspaceSlug, project.projectId));
+  // column header: the guest's name and the count of its work items (the header shows the bare name)
+  await expect(page.getByText(new RegExp(`${guest.displayName}\\s*2$`)).first()).toBeVisible({ timeout: 30_000 });
+  for (const item of items) {
+    // oxlint-disable-next-line no-await-in-loop
+    await expect(page.getByText(item.name).first()).toBeVisible();
+  }
+  await guestContext.close();
 });

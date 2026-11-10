@@ -20,14 +20,13 @@ from plane.db.models import (
     DraftIssueLabel,
     DraftIssueCycle,
     DraftIssueModule,
-    ProjectMember,
     EstimatePoint,
 )
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
 )
-from plane.app.permissions import ROLE
+from plane.extended.rules.guest_assignment import assignable_draft_assignee_ids
 
 
 class DraftIssueCreateSerializer(BaseSerializer):
@@ -92,12 +91,9 @@ class DraftIssueCreateSerializer(BaseSerializer):
 
         # Validate assignees are from project
         if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = ProjectMember.objects.filter(
-                project_id=self.context["project_id"],
-                role__gte=ROLE.MEMBER.value,
-                is_active=True,
-                member_id__in=attrs["assignee_ids"],
-            ).values_list("member_id", flat=True)
+            attrs["assignee_ids"] = assignable_draft_assignee_ids(
+                self.context["project_id"], attrs["assignee_ids"], draft=self.instance
+            )
 
         # Validate labels are from project
         if attrs.get("label_ids"):

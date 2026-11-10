@@ -10,11 +10,21 @@ import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from plane.db.models import Issue, IssueAssignee, Project, ProjectMember, State, User, WorkspaceMember
+from plane.db.models import (
+    DraftIssueAssignee,
+    Issue,
+    IssueAssignee,
+    Project,
+    ProjectMember,
+    State,
+    User,
+    WorkspaceMember,
+)
 from plane.extended.models import ProjectGuestCollaboration
 
 ISSUES_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/"
 ISSUE_DETAIL_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/{pk}/"
+DRAFTS_URL = "/api/workspaces/{slug}/draft-issues/"
 
 
 def _make_project(workspace, owner, identifier):
@@ -157,3 +167,28 @@ class TestUpdateWithGuestAssignee:
         _configure(project, collaboration=True, guest_access=True)
         self._patch(session_client, workspace, project, issue, [str(foreign_guest.id)])
         assert _assignee_ids(issue.id) == set()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestDraftWithGuestAssignee:
+    def _create(self, client, workspace, project, assignee_ids):
+        url = DRAFTS_URL.format(slug=workspace.slug)
+        response = client.post(
+            url, {"name": "Draft", "project_id": str(project.id), "assignee_ids": assignee_ids}, format="json"
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        return set(
+            DraftIssueAssignee.objects.filter(draft_issue_id=response.data["id"]).values_list("assignee_id", flat=True)
+        )
+
+    def test_guest_is_kept_with_collaboration_and_guest_access(self, session_client, workspace, project, member, guest):
+        _configure(project, collaboration=True, guest_access=True)
+        assert self._create(session_client, workspace, project, [str(member.id), str(guest.id)]) == {
+            member.id,
+            guest.id,
+        }
+
+    def test_guest_is_dropped_without_collaboration(self, session_client, workspace, project, member, guest):
+        _configure(project, collaboration=False, guest_access=True)
+        assert self._create(session_client, workspace, project, [str(member.id), str(guest.id)]) == {member.id}
