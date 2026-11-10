@@ -246,4 +246,5 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 - **Not in Plane**: no plan documents assigning a work item to a guest. Community Edition only has `guest_view_all_features`, which lets guests see every work item of a project.
 - **Why built anyway**: hand a work item to a client or an external contributor, who finds it in their own space, without giving them the Member role.
 - **Decided by**: Loïc Vanderschooten, on 2026-11-10.
-- **Upstream files**: see "Assign work items to guests (LONESTONEP-4)" under "Upstream files touched".
+- **Upstream files**: `apps/api/plane/app/serializers/issue.py`, `apps/api/plane/app/serializers/draft.py`, `apps/web/core/components/dropdowns/member/dropdown.tsx`, `apps/web/core/components/issues/issue-layouts/utils.tsx`, `apps/web/core/components/power-k/ui/pages/context-based/work-item/root.tsx`, and keys appended to `packages/i18n/src/locales/{en,fr}/work-item.json` (details under "Upstream files touched").
+- **Gap with the ticket**: Plane keeps "Your work" to workspace admins and members, so an assigned guest finds the work item in the project's views, not in "Your work".
