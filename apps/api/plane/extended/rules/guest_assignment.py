@@ -4,6 +4,9 @@
 
 """Who can be assigned to a work item (LONESTONEP-4).
 
+Kept out of ``plane.extended.services``: upstream serializers import this module, and the services
+package imports bgtasks that import those serializers back (circular import). Only models here.
+
 Upstream only accepts active project members with at least the member role. The fork also
 accepts active guests when the project allows guests to collaborate and has "Guest access"
 on (``Project.guest_view_all_features``), so that a guest never gets a work item they cannot see.
@@ -14,9 +17,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
-from plane.db.models import Project, ProjectMember
-
-from .guest_collaboration import guest_can_collaborate
+from plane.db.models import IssueAssignee, Project, ProjectMember
+from plane.extended.models import ProjectGuestCollaboration
 
 GUEST_ROLE = 5
 MEMBER_ROLE = 15
@@ -24,9 +26,10 @@ MEMBER_ROLE = 15
 
 def guests_are_assignable(project_id: UUID | str) -> bool:
     """True when the project lets its guests be assigned to work items."""
-    if not guest_can_collaborate(project_id):
-        return False
-    return Project.objects.filter(pk=project_id, guest_view_all_features=True).exists()
+    collaborates = ProjectGuestCollaboration.objects.filter(
+        project_id=project_id, guest_can_collaborate=True, deleted_at__isnull=True
+    ).exists()
+    return collaborates and Project.objects.filter(pk=project_id, guest_view_all_features=True).exists()
 
 
 def assignable_member_ids(
@@ -56,3 +59,13 @@ def assignable_member_ids(
         if member_id in eligible and member_id not in kept:
             kept.append(member_id)
     return kept
+
+
+def _ids(users_or_ids: Iterable) -> list[str]:
+    return [str(getattr(item, "id", item)) for item in users_or_ids]
+
+
+def assignable_issue_assignee_ids(project_id: UUID | str, requested: Iterable, issue=None) -> list[str]:
+    """``assignable_member_ids`` for ``IssueCreateSerializer``: users or ids in, the issue's current assignees kept."""
+    current = IssueAssignee.objects.filter(issue=issue).values_list("assignee_id", flat=True) if issue else ()
+    return assignable_member_ids(project_id, _ids(requested), current_ids=current)

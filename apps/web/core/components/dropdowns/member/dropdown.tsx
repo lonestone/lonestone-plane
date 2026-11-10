@@ -9,6 +9,7 @@ import { useParams } from "next/navigation";
 import type { LucideIcon } from "lucide-react";
 // hooks
 import { useMember } from "@/hooks/store/use-member";
+import { includeGuestAssignees, useGuestUserDetails } from "@/plane-web/components/issues/guest-assignment";
 // local imports
 import { MemberDropdownBase } from "./base";
 import type { MemberDropdownProps } from "./types";
@@ -32,11 +33,12 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
     project: { getProjectMemberIds, fetchProjectMembers },
     workspace: { workspaceMemberIds },
   } = useMember();
+  const guestUserDetails = useGuestUserDetails(projectId, getUserDetails);
 
   const memberIds = propsMemberIds
     ? propsMemberIds
     : projectId
-      ? getProjectMemberIds(projectId, false)
+      ? getProjectMemberIds(projectId, props.multiple && includeGuestAssignees(projectId))
       : workspaceMemberIds;
 
   const onDropdownOpen = () => {
@@ -46,7 +48,7 @@ export const MemberDropdown = observer(function MemberDropdown(props: TMemberDro
   return (
     <MemberDropdownBase
       {...props}
-      getUserDetails={getUserDetails}
+      getUserDetails={guestUserDetails}
       memberIds={memberIds ?? []}
       onDropdownOpen={onDropdownOpen}
     />

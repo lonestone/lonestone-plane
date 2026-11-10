@@ -43,6 +43,7 @@ from plane.db.models import (
     ProjectMember,
     EstimatePoint,
 )
+from plane.extended.rules.guest_assignment import assignable_issue_assignee_ids
 from plane.utils.content_validator import (
     validate_html_content,
     validate_binary_data,
@@ -148,12 +149,9 @@ class IssueCreateSerializer(BaseSerializer):
 
         # Validate assignees are from project
         if attrs.get("assignee_ids", []):
-            attrs["assignee_ids"] = ProjectMember.objects.filter(
-                project_id=self.context["project_id"],
-                role__gte=15,
-                is_active=True,
-                member_id__in=attrs["assignee_ids"],
-            ).values_list("member_id", flat=True)
+            attrs["assignee_ids"] = assignable_issue_assignee_ids(
+                self.context["project_id"], attrs["assignee_ids"], issue=self.instance
+            )
 
         # Validate labels are from project
         if attrs.get("label_ids"):

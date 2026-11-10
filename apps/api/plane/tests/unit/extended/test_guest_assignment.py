@@ -8,7 +8,7 @@ import pytest
 
 from plane.db.models import Project, ProjectMember, User, WorkspaceMember
 from plane.extended.models import ProjectGuestCollaboration
-from plane.extended.services.guest_assignment import assignable_member_ids
+from plane.extended.rules.guest_assignment import assignable_member_ids
 
 
 def _make_project(workspace, owner, identifier):

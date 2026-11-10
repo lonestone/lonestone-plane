@@ -3,17 +3,14 @@
 # See the LICENSE file for details.
 
 from .apply_project_template import apply_project_template
-from .guest_assignment import assignable_member_ids, guests_are_assignable
 from .guest_collaboration import get_or_create_guest_collaboration, guest_can_collaborate
 from .issue_bulk_update import bulk_update_issues
 from .snapshot_project_template import build_project_template_snapshot
 
 __all__ = (
     "apply_project_template",
-    "assignable_member_ids",
     "build_project_template_snapshot",
     "bulk_update_issues",
     "guest_can_collaborate",
-    "guests_are_assignable",
     "get_or_create_guest_collaboration",
 )
