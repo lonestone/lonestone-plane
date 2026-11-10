@@ -342,6 +342,15 @@
     "failure_reasons": {
       "not_found": "Certains éléments de travail ne sont plus disponibles.",
       "invalid_date_range": "La date de début serait postérieure à la date d'échéance pour certains éléments de travail."
+    },
+    "guest_assignment": {
+      "badge": "Guest",
+      "modal_title": "Ce guest ne voit pas encore le ticket",
+      "modal_body": "Tant que Guest access est désactivé, les guests ne voient que les tickets qu'ils ont créés. Activez Guest access pour qu'ils voient tous les tickets du projet, puis assignez-les.",
+      "modal_body_member": "Demandez à une admin du projet d'activer Guest access dans les réglages du projet.",
+      "enable_and_assign": "Activer Guest access et assigner",
+      "cancel": "Annuler",
+      "close": "Fermer"
     }
   },
   "recurring_work_items": {

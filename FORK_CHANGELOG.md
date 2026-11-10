@@ -171,7 +171,11 @@ The suite itself (`apps/web-e2e/`, `docker-compose-e2e.yml`) is fork-owned.
 
 ### Assign work items to guests (LONESTONEP-4)
 
-None yet: rows are added with the code.
+| File                                                          | Status   | Change                                                                                                                                                                                                         |
+| ------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/unit/extended/test_guest_assignment.py` | Added    | Unit tests of the guest assignment rule                                                                                                                                                                        |
+| `packages/i18n/src/locales/en/work-item.json`                 | Modified | `guest_assignment` keys appended at the end of `bulk_operations`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours |
+| `packages/i18n/src/locales/fr/work-item.json`                 | Modified | `guest_assignment` keys appended at the end of `bulk_operations`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours |
 
 ## Upstream dependencies
 
