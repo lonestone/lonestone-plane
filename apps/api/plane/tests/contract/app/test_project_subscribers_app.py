@@ -26,7 +26,7 @@ from plane.db.models import (
     UserNotificationPreference,
     WorkspaceMember,
 )
-from plane.extended.models import ProjectSubscriber
+from plane.extended.models import ProjectGuestCollaboration, ProjectSubscriber
 from plane.extended.tasks import notify_project_subscribers_of_new_issue
 from plane.tests.factories import ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
 from plane.tests.fork_builders import client_for, make_issue, make_project, make_user
@@ -479,8 +479,9 @@ class TestProjectAdminsAreSubscribersByDefault:
 
 @pytest.mark.contract
 @pytest.mark.django_db
-class TestSubscriberTurnedGuestStopsFollowing:
-    """A guest only opens their own work items: no notifications of the others'."""
+class TestGuestsAreNotToldOfWorkItemsTheyCannotOpen:
+    """A guest only opens their own work items unless "Guest access" is on: whatever they follow, upstream's
+    notifications and emails of the others' work items must not reach them (``issue_reader_ids``)."""
 
     @pytest.fixture(autouse=True)
     def run_tasks_inline(self, monkeypatch):
@@ -503,14 +504,21 @@ class TestSubscriberTurnedGuestStopsFollowing:
     def _changes(self, workspace, project, author, issue_id):
         url = f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{issue_id}/"
         client = client_for(author)
-        client.patch(url, {"priority": "high"}, format="json")
-        client.post(f"{url}comments/", {"comment_html": "<p>Secret detail</p>"}, format="json")
+        assert client.patch(url, {"priority": "high"}, format="json").status_code == status.HTTP_204_NO_CONTENT
+        response = client.post(f"{url}comments/", {"comment_html": "<p>Secret detail</p>"}, format="json")
+        assert response.status_code == status.HTTP_201_CREATED, response.data
 
-    def _notified(self, user, issue_id):
-        return (
-            Notification.objects.filter(receiver=user, entity_identifier=issue_id).count(),
-            EmailNotificationLog.objects.filter(receiver=user, entity_identifier=issue_id).count(),
-        )
+    def _told_after_changes(self, workspace, project, author, user, issue_id):
+        def count():
+            return (
+                Notification.objects.filter(receiver=user, entity_identifier=issue_id).count(),
+                EmailNotificationLog.objects.filter(receiver=user, entity_identifier=issue_id).count(),
+            )
+
+        before = count()
+        self._changes(workspace, project, author, issue_id)
+        after = count()
+        return after[0] > before[0], after[1] > before[1]
 
     def test_demoted_in_the_project(self, session_client, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
@@ -518,12 +526,9 @@ class TestSubscriberTurnedGuestStopsFollowing:
         own = _create_issue(client_for(manager), workspace, project)
 
         self._demote_in_project(session_client, workspace, project, manager)
-        before = self._notified(manager, others)
-        self._changes(workspace, project, author, others)
 
-        assert manager.id not in _subscriber_ids(others)
-        assert manager.id in _subscriber_ids(own)
-        assert self._notified(manager, others) == before
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)
+        assert self._told_after_changes(workspace, project, author, manager, own) == (True, True)
 
     def test_demoted_in_the_workspace(self, session_client, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
@@ -536,22 +541,22 @@ class TestSubscriberTurnedGuestStopsFollowing:
 
         assert response.status_code == status.HTTP_200_OK, response.data
         assert ProjectMember.objects.get(project=project, member=manager).role == 5
-        assert manager.id not in _subscriber_ids(others)
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)
 
-    def test_guest_access_keeps_the_follows(self, session_client, workspace, project, manager, author):
-        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+    def test_demoted_without_a_signal(self, workspace, project, manager, author):
+        # Upstream also writes roles with ``bulk_update`` and ``QuerySet.update()`` (for instance before
+        # validating a workspace member PATCH): no ``post_save``.
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         others = _create_issue(client_for(author), workspace, project)
 
-        self._demote_in_project(session_client, workspace, project, manager)
+        ProjectMember.objects.filter(project=project, member=manager).update(role=5)
 
-        assert manager.id in _subscriber_ids(others)
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)
 
     def test_removed_then_added_back_as_a_guest(self, session_client, workspace, project, manager, author):
-        # Adding back goes through upstream's ``bulk_update``, which sends no signal: leaving revokes.
+        # Adding back goes through upstream's ``bulk_update``, which sends no signal.
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         others = _create_issue(client_for(author), workspace, project)
-        own = _create_issue(client_for(manager), workspace, project)
         members_url = f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/"
         membership = ProjectMember.objects.get(project=project, member=manager)
 
@@ -559,38 +564,54 @@ class TestSubscriberTurnedGuestStopsFollowing:
         response = session_client.post(
             members_url, {"members": [{"member_id": str(manager.id), "role": 5}]}, format="json"
         )
+
         assert response.status_code == status.HTTP_201_CREATED, response.data
         assert ProjectMember.objects.get(project=project, member=manager).is_active
-        before = self._notified(manager, others)
-        self._changes(workspace, project, author, others)
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)
 
-        assert manager.id not in _subscriber_ids(others)
-        assert manager.id in _subscriber_ids(own)
-        assert self._notified(manager, others) == before
+    def test_guest_access_turned_off_later(self, session_client, workspace, project, manager, author):
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        self._demote_in_project(session_client, workspace, project, manager)
+        assert self._told_after_changes(workspace, project, author, manager, others) == (True, True)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/",
+            {"guest_view_all_features": False},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)
+
+    def test_assigned_guest_after_guest_access_is_turned_off(self, session_client, workspace, project, author):
+        # LONESTONEP-4: a guest is assignable while collaboration and "Guest access" are on.
+        guest = make_user(workspace, project, 5)
+        ProjectGuestCollaboration.objects.update_or_create(project=project, defaults={"guest_can_collaborate": True})
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+        others = _create_issue(client_for(author), workspace, project)
+        url = f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{others}/"
+        assigned = client_for(author).patch(url, {"assignee_ids": [str(guest.id)]}, format="json")
+        assert assigned.status_code == status.HTTP_204_NO_CONTENT, assigned.data
+
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=False)
+
+        assert self._told_after_changes(workspace, project, author, guest, others) == (False, False)
+
+    def test_member_stays_told(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+
+        assert self._told_after_changes(workspace, project, author, manager, others) == (True, True)
 
     def test_removed_from_the_workspace(self, session_client, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         others = _create_issue(client_for(author), workspace, project)
-        own = _create_issue(client_for(manager), workspace, project)
         membership = WorkspaceMember.objects.get(workspace=workspace, member=manager)
 
         response = session_client.delete(f"/api/workspaces/{workspace.slug}/members/{membership.id}/")
 
         assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert manager.id not in _subscriber_ids(others)
-        assert manager.id in _subscriber_ids(own)
-
-    def test_guest_access_keeps_the_follows_of_a_member_who_leaves(
-        self, session_client, workspace, project, manager, author
-    ):
-        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
-        ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        others = _create_issue(client_for(author), workspace, project)
-        membership = ProjectMember.objects.get(project=project, member=manager)
-
-        response = session_client.delete(
-            f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/{membership.id}/"
-        )
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        assert manager.id in _subscriber_ids(others)
+        assert not ProjectSubscriber.objects.filter(subscriber=manager).exists()
+        assert self._told_after_changes(workspace, project, author, manager, others) == (False, False)

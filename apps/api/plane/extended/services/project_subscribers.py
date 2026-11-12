@@ -162,22 +162,6 @@ def subscribed_admin_projects(user) -> list[dict]:
     ]
 
 
-def revoke_unreadable_follows(user_id: UUID | str, project_ids: Iterable[UUID | str]) -> None:
-    """Unsubscribe a guest from the work items they can no longer open.
-
-    Upstream notifies subscribers whatever their role, but a guest only opens their own work items
-    unless ``guest_view_all_features`` is on: the notifications would leak to a member turned guest.
-    """
-    project_ids = list(
-        Project.objects.filter(pk__in=list(project_ids), guest_view_all_features=False).values_list("id", flat=True)
-    )
-    if not project_ids:
-        return
-    IssueSubscriber.objects.filter(project_id__in=project_ids, subscriber_id=user_id).exclude(
-        issue__created_by_id=user_id
-    ).delete()
-
-
 def _activity(issue: Issue) -> dict:
     return {
         "id": "",

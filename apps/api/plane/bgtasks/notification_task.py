@@ -25,6 +25,7 @@ from plane.db.models import (
     ProjectMember,
 )
 from django.db.models import Subquery
+from plane.extended.rules.issue_readers import issue_reader_ids
 
 # Third Party imports
 from celery import shared_task
@@ -228,9 +229,7 @@ def notifications(
             """
 
             # get the list of active project members
-            project_members = ProjectMember.objects.filter(project_id=project_id, is_active=True).values_list(
-                "member_id", flat=True
-            )
+            project_members = issue_reader_ids(project_id, issue_id)
 
             # Get new mentions from the newer instance
             new_mentions = get_new_mentions(requested_instance=requested_data, current_instance=current_instance)

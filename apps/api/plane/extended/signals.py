@@ -13,7 +13,6 @@ from plane.db.models import Issue, IssueActivity, ProjectMember, WorkspaceMember
 from plane.extended.models import ProjectSubscriber
 from plane.extended.services.project_subscribers import (
     forget_member,
-    revoke_unreadable_follows,
     subscribe_new_issue,
 )
 from plane.extended.tasks import notify_project_subscribers_of_new_issue
@@ -38,45 +37,27 @@ def notify_project_subscribers(sender, instance, created, raw=False, **kwargs):
 
 @receiver(post_save, sender=ProjectMember, dispatch_uid="extended_remove_departed_project_subscriber")
 def remove_departed_project_subscriber(sender, instance, created, raw=False, **kwargs):
-    """Leaving drops the subscription, losing admin drops the opt-out, turning guest revokes follows.
+    """Leaving drops the subscription, losing admin drops the opt-out.
 
     Upstream's bulk updates send no signal; ``subscriber_entries`` reads memberships at run time anyway.
-    Work item follows do not get that safety net: upstream's ``notifications`` reads them as they are, and
-    every way back into a project (``ProjectMemberViewSet.create``, joining from the workspace, the
-    ``create_project_member`` command) sends no signal and may make them a guest. So leaving also revokes
-    the follows a guest could not read; a member who comes back does not follow those work items again.
+    A guest's follows of work items they cannot open are left alone: ``issue_reader_ids`` keeps them silent.
     """
     if raw:
         return
     if not instance.is_active:
         forget_member(instance.project_id, instance.member_id)
-        revoke_unreadable_follows(instance.member_id, [instance.project_id])
         return
     if instance.role != ROLE.ADMIN.value:
         ProjectSubscriber.objects.filter(
             project_id=instance.project_id, subscriber_id=instance.member_id, is_subscribed=False
         ).delete(soft=False)
-    if instance.role < ROLE.MEMBER.value:
-        revoke_unreadable_follows(instance.member_id, [instance.project_id])
 
 
 @receiver(post_save, sender=WorkspaceMember, dispatch_uid="extended_remove_departed_workspace_subscriber")
 def remove_departed_workspace_subscriber(sender, instance, created, raw=False, **kwargs):
-    """Same for the workspace: upstream updates the project memberships with ``QuerySet.update()``."""
-    if raw:
+    """Leaving the workspace: upstream deactivates the project memberships with ``QuerySet.update()``."""
+    if raw or instance.is_active:
         return
-    if not instance.is_active:
-        ProjectSubscriber.objects.filter(
-            project__workspace_id=instance.workspace_id, subscriber_id=instance.member_id
-        ).delete(soft=False)
-        # As when leaving a project: the ways back send no signal.
-        project_ids = ProjectMember.objects.filter(
-            workspace_id=instance.workspace_id, member_id=instance.member_id
-        ).values_list("project_id", flat=True)
-        revoke_unreadable_follows(instance.member_id, project_ids)
-        return
-    if instance.role < ROLE.MEMBER.value:
-        project_ids = ProjectMember.objects.filter(
-            workspace_id=instance.workspace_id, member_id=instance.member_id, is_active=True
-        ).values_list("project_id", flat=True)
-        revoke_unreadable_follows(instance.member_id, project_ids)
+    ProjectSubscriber.objects.filter(
+        project__workspace_id=instance.workspace_id, subscriber_id=instance.member_id
+    ).delete(soft=False)
