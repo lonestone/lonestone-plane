@@ -37,8 +37,8 @@ services:
     restart: unless-stopped
     networks:
       - dev_env
-    # SMTP stays internal (mailpit:1025); only the web UI is published.
+    # SMTP stays internal (mailpit:1025); the web UI is published on this machine only (no authentication).
     expose:
       - "1025"
     ports:
-      - "8025:8025"
+      - "127.0.0.1:8025:8025"

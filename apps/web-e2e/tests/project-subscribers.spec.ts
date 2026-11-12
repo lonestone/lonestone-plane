@@ -6,8 +6,15 @@
 
 import type { Page } from "@playwright/test";
 import { addMemberWithContext, createWorkItems, expect, test } from "./fixtures";
-import { addProjectSubscriber, isSubscribed, listNotifications, setEmailPreferences } from "./helpers/plane";
-import { emailsTo, sendQueuedNotificationEmails } from "./helpers/mail";
+import {
+  addProjectSubscriber,
+  isSubscribed,
+  listNotifications,
+  listProjectSubscriberIds,
+  ROLE,
+  setEmailPreferences,
+} from "./helpers/plane";
+import { emailsTo } from "./helpers/mail";
 import { projectMembersSettingsUrl, WEB_URL, workItemUrl } from "./helpers/urls";
 
 // LONESTONEP-8: project admins choose project subscribers in Project Settings → Members; a project
@@ -18,26 +25,49 @@ function picker(page: Page, name: string | RegExp) {
   return page.getByRole("button", { name }).first();
 }
 
-test("an admin adds and removes a project subscriber", async ({ page, browser, project }) => {
+/** Picks an option of the open picker and waits for the API to save the change. */
+async function toggleOption(page: Page, name: RegExp, method: "POST" | "DELETE") {
+  const saved = page.waitForResponse(
+    (response) => response.url().includes("/subscribers/") && response.request().method() === method
+  );
+  await page.getByRole("option", { name }).click();
+  expect((await saved).ok()).toBe(true);
+  await page.keyboard.press("Escape");
+}
+
+/** Subjects of the emails received by this address. */
+async function subjectsTo(address: string): Promise<string[]> {
+  return (await emailsTo(address)).map((email) => email.Subject);
+}
+
+test("an admin adds and removes a project subscriber, among the members only", async ({ page, browser, project }) => {
   const { member, context } = await addMemberWithContext(browser, project);
+  const { member: guest, context: guestContext } = await addMemberWithContext(browser, project, ROLE.guest);
+  // option names start with the avatar's initial
+  const memberOption = new RegExp(` ${member.displayName}$`);
 
   await page.goto(projectMembersSettingsUrl(project.workspaceSlug, project.projectId));
   await picker(page, "Add subscribers").click();
-  // option names start with the avatar's initial
-  await page.getByRole("option", { name: new RegExp(` ${member.displayName}$`) }).click();
-  await page.keyboard.press("Escape");
+  await expect(page.getByRole("option", { name: memberOption })).toBeVisible();
+  // guests cannot be project subscribers
+  await expect(page.getByRole("option", { name: new RegExp(` ${guest.displayName}$`) })).toHaveCount(0);
+  await toggleOption(page, memberOption, "POST");
+  expect(await listProjectSubscriberIds(project.session, project.workspaceSlug, project.projectId)).toEqual([
+    member.id,
+  ]);
 
   await page.reload();
   // the button shows the subscriber's avatar initial, then their name
   await expect(picker(page, new RegExp(` ${member.displayName}$`))).toBeVisible();
 
   await picker(page, new RegExp(` ${member.displayName}$`)).click();
-  await page.getByRole("option", { name: new RegExp(` ${member.displayName}$`) }).click();
-  await page.keyboard.press("Escape");
+  await toggleOption(page, memberOption, "DELETE");
+  expect(await listProjectSubscriberIds(project.session, project.workspaceSlug, project.projectId)).toEqual([]);
 
   await page.reload();
   await expect(picker(page, "Add subscribers")).toBeVisible();
   await context.close();
+  await guestContext.close();
 });
 
 test("a member sees the project subscribers without changing them", async ({ browser, project }) => {
@@ -75,16 +105,14 @@ test("a project subscriber follows a new work item and is told of it in the Inbo
   await memberPage.goto(`${WEB_URL}/${project.workspaceSlug}/notifications/`);
   await expect(memberPage.getByText("created the work item")).toBeVisible();
 
-  // and by email
+  // and by email, sent at once by the fork (not batched with the work item's updates)
   await expect
-    .poll(
-      async () => {
-        sendQueuedNotificationEmails();
-        return (await emailsTo(member.email)).map((email) => email.Subject);
-      },
-      { timeout: 30_000, intervals: [1_000, 2_000] }
-    )
-    .toEqual(expect.arrayContaining([expect.stringMatching(new RegExp(`-${workItem.sequence_id} Homepage mock-up$`))]));
+    .poll(() => subjectsTo(member.email), { timeout: 30_000 })
+    .toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(new RegExp(` created \\S+-${workItem.sequence_id} Homepage mock-up$`)),
+      ])
+    );
   await context.close();
 });
 
@@ -93,15 +121,23 @@ test("a project subscriber who turned off property change emails is only told in
   project,
 }) => {
   const { member, context } = await addMemberWithContext(browser, project);
-  await addProjectSubscriber(project.session, project.workspaceSlug, project.projectId, member.id);
+  // a second subscriber keeps the emails: once theirs has arrived, the emails of this work item are sent
+  const { member: witness, context: witnessContext } = await addMemberWithContext(browser, project);
+  await Promise.all(
+    [member, witness].map((subscriber) =>
+      addProjectSubscriber(project.session, project.workspaceSlug, project.projectId, subscriber.id)
+    )
+  );
   await setEmailPreferences(member.session, { property_change: false });
   await createWorkItems(project, ["Footer links"]);
 
   await expect
     .poll(async () => (await listNotifications(member.session, project.workspaceSlug)).length, { timeout: 30_000 })
     .toBe(1);
-  sendQueuedNotificationEmails();
-  const subjects = (await emailsTo(member.email)).map((email) => email.Subject);
-  expect(subjects.filter((subject) => subject.includes("Footer links"))).toEqual([]);
+  await expect
+    .poll(() => subjectsTo(witness.email), { timeout: 30_000 })
+    .toEqual(expect.arrayContaining([expect.stringMatching(/ Footer links$/)]));
+  expect((await subjectsTo(member.email)).filter((subject) => subject.includes("Footer links"))).toEqual([]);
   await context.close();
+  await witnessContext.close();
 });

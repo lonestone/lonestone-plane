@@ -16,10 +16,12 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.notification_task import notifications
 from plane.db.models import (
     EmailNotificationLog,
+    Intake,
     Issue,
     IssueSubscriber,
     Notification,
     ProjectMember,
+    State,
     UserNotificationPreference,
     WorkspaceMember,
 )
@@ -35,6 +37,19 @@ def _create_issue(client, workspace, project, name="New ticket"):
     response = client.post(ISSUES_URL.format(slug=workspace.slug, project_id=project.id), {"name": name}, format="json")
     assert response.status_code == status.HTTP_201_CREATED, response.data
     return response.data["id"]
+
+
+def _make_state(project, name, group="started"):
+    return State.objects.create(
+        name=name, color="#000000", project=project, workspace=project.workspace, sequence=2, group=group
+    )
+
+
+def _notified_fields(user, issue_id):
+    return [
+        notification.data["issue_activity"]["field"]
+        for notification in Notification.objects.filter(receiver=user, entity_identifier=issue_id)
+    ]
 
 
 def _subscriber_ids(issue_id):
@@ -108,22 +123,24 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         monkeypatch.setattr(
             notify_project_subscribers_of_new_issue, "delay", notify_project_subscribers_of_new_issue.run
         )
+        # In production, each ``transaction.atomic()`` block commits on its own (no ATOMIC_REQUESTS), so
+        # ``on_commit`` callbacks run as soon as their block ends, in the middle of the request. Run them
+        # at once here too, rather than at the end of the request.
+        monkeypatch.setattr("plane.extended.signals.transaction.on_commit", lambda func, *args, **kwargs: func())
 
-    def _create(self, django_capture_on_commit_callbacks, client, workspace, project, **data):
-        with django_capture_on_commit_callbacks(execute=True):
-            response = client.post(
-                ISSUES_URL.format(slug=workspace.slug, project_id=project.id),
-                {"name": "New ticket", **data},
-                format="json",
-            )
+    def _create(self, client, workspace, project, **data):
+        response = client.post(
+            ISSUES_URL.format(slug=workspace.slug, project_id=project.id),
+            {"name": "New ticket", **data},
+            format="json",
+        )
         assert response.status_code == status.HTTP_201_CREATED, response.data
         return response.data["id"]
 
     def test_project_subscriber_is_told_of_a_new_work_item(
-        self, django_capture_on_commit_callbacks, workspace, project, manager, author
-    ):
+        self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
+        issue_id = self._create(client_for(author), workspace, project)
 
         notification = Notification.objects.get(receiver=manager, entity_identifier=issue_id)
         assert notification.triggered_by_id == author.id
@@ -137,40 +154,99 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert not EmailNotificationLog.objects.filter(entity_identifier=issue_id).exists()
 
     def test_email_follows_the_property_changes_preference(
-        self, django_capture_on_commit_callbacks, workspace, project, manager, author
-    ):
+        self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         UserNotificationPreference.objects.filter(user=manager).update(property_change=False)
-        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
+        issue_id = self._create(client_for(author), workspace, project)
 
         assert Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
         assert not [message for message in mail.outbox if message.to == [manager.email]]
 
     def test_author_is_not_told_of_their_own_work_item(
-        self, django_capture_on_commit_callbacks, workspace, project, manager
-    ):
+        self, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = self._create(django_capture_on_commit_callbacks, client_for(manager), workspace, project)
+        issue_id = self._create(client_for(manager), workspace, project)
         assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
 
     def test_assigned_subscriber_only_gets_the_assignment(
-        self, django_capture_on_commit_callbacks, workspace, project, manager, author
-    ):
+        self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         issue_id = self._create(
-            django_capture_on_commit_callbacks, client_for(author), workspace, project, assignee_ids=[str(manager.id)]
+            client_for(author), workspace, project, assignee_ids=[str(manager.id)]
         )
-        fields = [
-            notification.data["issue_activity"]["field"]
-            for notification in Notification.objects.filter(receiver=manager, entity_identifier=issue_id)
-        ]
+        fields = _notified_fields(manager, issue_id)
         assert "project_subscription" not in fields
         assert "assignees" in fields
 
-    def test_nobody_is_told_without_project_subscribers(
-        self, django_capture_on_commit_callbacks, workspace, project, manager, author
+    def test_project_subscriber_is_told_of_the_changes_that_follow(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        issue_id = self._create(client_for(author), workspace, project)
+        started = _make_state(project, "In Progress")
+
+        response = client_for(author).patch(
+            f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{issue_id}/",
+            {"state_id": str(started.id)},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT, response.data
+        fields = _notified_fields(manager, issue_id)
+        assert "state" in fields
+
+    def test_unsubscribing_from_one_work_item_keeps_the_project_subscription(
+        self, workspace, project, manager, author
     ):
-        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        issue_id = self._create(client_for(author), workspace, project)
+        url = f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{issue_id}/"
+
+        unsubscribe = client_for(manager).delete(f"{url}subscribe/")
+        before = len(_notified_fields(manager, issue_id))
+        client_for(author).patch(url, {"state_id": str(_make_state(project, "In Progress").id)}, format="json")
+
+        assert unsubscribe.status_code == status.HTTP_204_NO_CONTENT
+        assert len(_notified_fields(manager, issue_id)) == before
+        assert ProjectSubscriber.objects.filter(project=project, subscriber=manager).exists()
+
+    def test_intake_work_item_is_told(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        Intake.objects.create(name="Intake", project=project, workspace=workspace, is_default=True)
+
+        response = client_for(author).post(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/intake-issues/",
+            {"issue": {"name": "Request from the client"}},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        issue_id = Issue.objects.get(name="Request from the client").id
+        assert manager.id in _subscriber_ids(issue_id)
+        assert "project_subscription" in _notified_fields(manager, issue_id)
+
+    def test_published_draft_is_told(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        client = client_for(author)
+        draft = client.post(
+            f"/api/workspaces/{workspace.slug}/draft-issues/",
+            {"name": "Drafted ticket", "project_id": str(project.id)},
+            format="json",
+        )
+        assert draft.status_code == status.HTTP_201_CREATED, draft.data
+
+        # The web app sends the draft's fields with the request, as below.
+        response = client.post(
+            f"/api/workspaces/{workspace.slug}/draft-to-issue/{draft.data['id']}/",
+            {"name": "Drafted ticket"},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        issue_id = Issue.objects.get(name="Drafted ticket").id
+        assert "project_subscription" in _notified_fields(manager, issue_id)
+
+    def test_nobody_is_told_without_project_subscribers(
+        self, workspace, project, manager, author):
+        issue_id = self._create(client_for(author), workspace, project)
         assert not Notification.objects.filter(entity_identifier=issue_id).exists()
 
 
@@ -265,11 +341,37 @@ class TestProjectSubscribersApi:
         assert manager.id in _subscriber_ids(issue_id)
         assert manager.id not in _subscriber_ids(_create_issue(client_for(author), workspace, project))
 
-    def test_project_of_another_workspace(self, session_client, workspace, project, manager):
-        response = session_client.get(
-            SUBSCRIBERS_URL.format(slug="no-such-workspace", project_id=project.id)
+    def test_outsider_gets_the_same_answer_as_for_an_unknown_project(self, workspace, project, create_user, manager):
+        other = make_project(workspace, create_user, "OTHR")
+        outsider = make_user(workspace, other, 20)  # admin elsewhere, not a member of this project
+        client = client_for(outsider)
+        unknown = uuid4()
+
+        for project_id in (project.id, unknown):
+            url = SUBSCRIBERS_URL.format(slug=workspace.slug, project_id=project_id)
+            assert client.get(url).status_code == status.HTTP_403_FORBIDDEN
+            assert (
+                client.post(url, {"subscriber_id": str(manager.id)}, format="json").status_code
+                == status.HTTP_403_FORBIDDEN
+            )
+            assert client.delete(f"{url}{manager.id}/").status_code == status.HTTP_403_FORBIDDEN
+        assert _listed(workspace, project) == set()
+
+    def test_subscriber_who_becomes_a_guest_stays_listed_but_stops_following(
+        self, session_client, workspace, project, manager, author
+    ):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        membership = ProjectMember.objects.get(project=project, member=manager)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/{membership.id}/",
+            {"role": 5},
+            format="json",
         )
-        assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert _listed(workspace, project) == {manager.id}
+        assert manager.id not in _subscriber_ids(_create_issue(client_for(author), workspace, project))
 
     def test_member_removed_from_the_project_is_no_longer_listed(self, session_client, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
@@ -300,6 +402,8 @@ class TestNewSubscriberFollowsExistingWorkItems:
         Issue.objects.filter(pk=archived.pk).update(archived_at=timezone.now())
         deleted = make_issue(project, author=author, name="Deleted")
         deleted.delete()
+        draft = make_issue(project, author=author, name="Draft", is_draft=True)
+        triage = make_issue(project, author=author, name="In triage", state=_make_state(project, "Triage", "triage"))
         IssueSubscriber.objects.create(project=project, workspace=workspace, issue=followed, subscriber=manager)
         notifications_before = Notification.objects.count()
 
@@ -312,6 +416,8 @@ class TestNewSubscriberFollowsExistingWorkItems:
         assert IssueSubscriber.objects.filter(issue=followed, subscriber=manager).count() == 1
         assert manager.id not in _subscriber_ids(archived.id)
         assert not IssueSubscriber.all_objects.filter(issue=deleted, subscriber=manager).exists()
+        assert manager.id not in _subscriber_ids(draft.id)
+        assert manager.id not in _subscriber_ids(triage.id)
         assert Notification.objects.count() == notifications_before
 
     def test_work_items_of_other_projects_are_left_alone(

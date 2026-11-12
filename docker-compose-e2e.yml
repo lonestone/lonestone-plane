@@ -112,7 +112,7 @@ services:
     networks:
       - e2e_env
     ports:
-      - "8225:8025"
+      - "127.0.0.1:8225:8025"
 
   e2e-api:
     image: plane-e2e-api

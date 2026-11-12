@@ -41,6 +41,10 @@ export const ProjectSubscribers = observer(function ProjectSubscribers(props: Pr
   const { data: subscribers, mutate } = useSWR(swrKey, () => projectSubscriberService.list(workspaceSlug, projectId));
   const value = (subscribers ?? []).map((subscriber) => subscriber.subscriber_id);
 
+  // Project members without the guests, plus the current subscribers: one who became a guest stays
+  // listed, so that an admin can still remove them.
+  const pickableIds = Array.from(new Set([...(getProjectMemberIds(projectId, false) ?? []), ...value]));
+
   const canManage =
     allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.PROJECT, workspaceSlug, projectId) ||
     allowPermissions([EUserPermissions.ADMIN], EUserPermissionsLevel.WORKSPACE, workspaceSlug);
@@ -98,7 +102,7 @@ export const ProjectSubscribers = observer(function ProjectSubscribers(props: Pr
           multiple
           value={value}
           onChange={handleChange}
-          memberIds={getProjectMemberIds(projectId, false) ?? []}
+          memberIds={pickableIds}
           getUserDetails={getUserDetails}
           onDropdownOpen={() => void fetchProjectMembers(workspaceSlug, projectId)}
           buttonVariant="border-with-text"

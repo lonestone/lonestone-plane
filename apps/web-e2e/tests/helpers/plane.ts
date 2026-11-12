@@ -365,3 +365,17 @@ export type TNotification = {
 export async function listNotifications(session: PlaneSession, workspaceSlug: string): Promise<TNotification[]> {
   return call(session, "GET", `/api/workspaces/${workspaceSlug}/users/notifications/`);
 }
+
+/** Ids of the project subscribers (LONESTONEP-8). */
+export async function listProjectSubscriberIds(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string
+): Promise<string[]> {
+  const rows = await call<{ subscriber_id: string }[]>(
+    session,
+    "GET",
+    `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/subscribers/`
+  );
+  return rows.map((row) => row.subscriber_id);
+}

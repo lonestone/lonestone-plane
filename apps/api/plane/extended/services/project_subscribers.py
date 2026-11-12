@@ -154,8 +154,10 @@ def notify_new_issue(issue_id: UUID | str) -> None:
     the assignment. The email follows the "Property changes" preference, as upstream's emails of
     property changes do.
     """
+    # ``Issue.objects`` rather than ``issue_objects``: a work item sent through the intake (triage state)
+    # is a new work item too. Drafts and archived work items are left out.
     issue = (
-        Issue.issue_objects.filter(pk=issue_id)
+        Issue.objects.filter(pk=issue_id, is_draft=False, archived_at__isnull=True)
         .select_related("project", "project__workspace", "state", "created_by")
         .first()
     )
