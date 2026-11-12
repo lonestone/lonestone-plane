@@ -521,6 +521,23 @@
           }
         }
       }
+    },
+    "subscribers": {
+      "title": "Project subscribers",
+      "description": "Les abonnés suivent tous les work items du projet : ils reçoivent une notification, et un email selon leurs réglages de notification, pour chaque nouveau work item et chaque changement. Les admins du projet sont abonnés d'office et peuvent se retirer.",
+      "description_read_only": "Les admins du projet sont abonnés d'office, et choisissent qui d'autre suit tous les work items du projet.",
+      "placeholder": "Ajouter des abonnés",
+      "empty": "Aucun abonné pour l'instant.",
+      "add_error": "Impossible d'ajouter l'abonné.",
+      "remove_error": "Impossible de retirer l'abonné.",
+      "announcement": {
+        "title": "Vous suivez désormais les nouveaux tickets de vos projets",
+        "projects": "Vous êtes admin de ces projets :",
+        "body": "Désormais, vous recevez une notification, et un email selon vos réglages de notification, pour chaque nouveau ticket créé dans ces projets.",
+        "how_to": "Pour vous désabonner, ouvrez les réglages du projet → Members → Project subscribers, et décochez-vous (« You ») :",
+        "image_alt": "Le sélecteur Project subscribers, avec « You » coché",
+        "got_it": "J'ai compris"
+      }
     }
   }
 }

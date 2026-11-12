@@ -227,7 +227,7 @@ export async function addProjectMember(
   workspaceSlug: string,
   projectId: string,
   role: (typeof ROLE)[keyof typeof ROLE] = ROLE.member
-): Promise<{ id: string; email: string; displayName: string }> {
+): Promise<{ id: string; email: string; displayName: string; session: PlaneSession }> {
   const member = await signUpFreshUser(memberRequest);
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/invitations/`, {
     emails: [{ email: member.email, role }],
@@ -244,7 +244,7 @@ export async function addProjectMember(
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/projects/${projectId}/members/`, {
     members: [{ member_id: me.id, role }],
   });
-  return { id: me.id, email: member.email, displayName: me.display_name };
+  return { id: me.id, email: member.email, displayName: me.display_name, session: member };
 }
 
 export async function getCurrentUser(session: PlaneSession): Promise<{ id: string; displayName: string }> {
@@ -319,4 +319,63 @@ export async function getProject(
   projectId: string
 ): Promise<{ id: string; guest_view_all_features: boolean }> {
   return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`);
+}
+
+/** Makes a project member a project subscriber (LONESTONEP-8): they follow every work item of the project. */
+export async function addProjectSubscriber(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  subscriberId: string
+): Promise<void> {
+  await call(session, "POST", `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/subscribers/`, {
+    subscriber_id: subscriberId,
+  });
+}
+
+/** Whether the session's user is a subscriber of the work item. */
+export async function isSubscribed(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  workItemId: string
+): Promise<boolean> {
+  const status = await call<{ subscribed: boolean }>(
+    session,
+    "GET",
+    `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/subscribe/`
+  );
+  return status.subscribed;
+}
+
+/** Email preferences of the session's user (Profile → Notifications). */
+export async function setEmailPreferences(
+  session: PlaneSession,
+  preferences: Partial<Record<"property_change" | "state_change" | "comment" | "mention" | "issue_completed", boolean>>
+): Promise<void> {
+  await call(session, "PATCH", "/api/users/me/notification-preferences/", preferences);
+}
+
+export type TNotification = {
+  entity_identifier: string;
+  data: { issue_activity: { field: string; verb: string } };
+};
+
+/** In-app notifications of the session's user (Inbox, "All" tab). */
+export async function listNotifications(session: PlaneSession, workspaceSlug: string): Promise<TNotification[]> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/users/notifications/`);
+}
+
+/** Ids of the project subscribers (LONESTONEP-8). */
+export async function listProjectSubscriberIds(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string
+): Promise<string[]> {
+  const rows = await call<{ subscriber_id: string }[]>(
+    session,
+    "GET",
+    `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/subscribers/`
+  );
+  return rows.map((row) => row.subscriber_id);
 }

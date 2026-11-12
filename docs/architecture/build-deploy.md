@@ -215,6 +215,26 @@ Notes:
 - Root `.env` already uses the Docker hostname for MinIO; `apps/api/.env` is what `docker-compose-local.yml` loads for api/worker/beat — keep them aligned.
 - Do not edit `docker-compose-local.yml` or `apps/proxy/Caddyfile.ce` for this; the overlay avoids upstream merge conflicts.
 
+### Emails in development (Mailpit)
+
+The overlay also starts Mailpit, which catches every email of the dev stack (invitations, magic codes, work item notifications). Its inbox is at <http://localhost:8025>; its SMTP server is only reachable inside the stack, at `mailpit:1025`.
+
+Plane reads its email settings from the instance configuration in the database (`SKIP_ENV_VAR=1` by default), not from `apps/api/.env`. Point them at Mailpit once per database, either in the admin app (<http://localhost:3001/god-mode/email/>: host `mailpit`, port `1025`, no TLS or SSL, no user) or with:
+
+```bash
+docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml exec api python manage.py shell -c "
+from plane.license.models import InstanceConfiguration as C
+for key, value in {'EMAIL_HOST': 'mailpit', 'EMAIL_PORT': '1025', 'EMAIL_USE_TLS': '0', 'EMAIL_USE_SSL': '0', 'EMAIL_HOST_USER': '', 'EMAIL_FROM': 'Plane dev <plane@localhost>'}.items():
+    C.objects.filter(key=key).update(value=value)"
+```
+
+Work item notification emails leave in batches: the beat worker runs `stack_email_notification` every 5 minutes. To send the pending ones at once:
+
+```bash
+docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml exec api python manage.py shell -c "
+from plane.bgtasks.email_notification_task import stack_email_notification; stack_email_notification()"
+```
+
 ---
 
 ## Proxy Routing (Caddyfile.ce)

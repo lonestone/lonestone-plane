@@ -4,6 +4,8 @@
 #   docker compose -f docker-compose-local.yml -f docker-compose.lonestone.yml up -d
 #
 # Puts Caddy in front of host :8000 so /uploads → MinIO (same model as production).
+# Adds Mailpit, which catches every email of the dev stack: UI on http://localhost:8025
+# (point the instance's email settings at it, see docs/architecture/build-deploy.md).
 
 services:
   api:
@@ -29,3 +31,14 @@ services:
     depends_on:
       - api
       - plane-minio
+
+  mailpit:
+    image: axllent/mailpit:v1.21.8
+    restart: unless-stopped
+    networks:
+      - dev_env
+    # SMTP stays internal (mailpit:1025); the web UI is published on this machine only (no authentication).
+    expose:
+      - "1025"
+    ports:
+      - "127.0.0.1:8025:8025"
