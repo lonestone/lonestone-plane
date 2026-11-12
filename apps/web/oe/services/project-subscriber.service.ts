@@ -7,12 +7,10 @@
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
+/** A project subscriber; `default` is true for a project admin, a subscriber because of their role. */
 export type TProjectSubscriber = {
-  id: string;
-  project_id: string;
   subscriber_id: string;
-  created_by: string | null;
-  created_at: string;
+  default: boolean;
 };
 
 /** Project subscribers API of the fork (LONESTONEP-8), `/api/extended/.../subscribers/`. */
@@ -33,9 +31,9 @@ export class ProjectSubscriberService extends APIService {
       });
   }
 
-  async add(workspaceSlug: string, projectId: string, subscriberId: string): Promise<TProjectSubscriber> {
+  async add(workspaceSlug: string, projectId: string, subscriberId: string): Promise<void> {
     return this.post(this.url(workspaceSlug, projectId), { subscriber_id: subscriberId })
-      .then((response) => response?.data)
+      .then(() => undefined)
       .catch((error) => {
         throw error?.response?.data;
       });

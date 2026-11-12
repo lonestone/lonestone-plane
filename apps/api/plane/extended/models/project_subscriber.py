@@ -15,6 +15,10 @@ from plane.db.models import BaseModel
 class ProjectSubscriber(BaseModel):
     """A project member that the project subscribes to each of its work items.
 
+    Active project admins are subscribers by default, without a row (a fork choice, not in Plane). A row
+    with ``is_subscribed=False`` records an admin who removed themselves; it is dropped when they stop
+    being an admin, so that becoming an admin again subscribes them again.
+
     ``BaseModel`` soft-deletes, but removing a subscriber deletes the row for good
     (``plane.extended.services.project_subscribers.remove_subscriber``). The unique constraint only
     covers live rows, as upstream does for work item subscribers, so a row soft-deleted with its
@@ -31,6 +35,7 @@ class ProjectSubscriber(BaseModel):
         on_delete=models.CASCADE,
         related_name="extended_project_subscriptions",
     )
+    is_subscribed = models.BooleanField(default=True)
 
     class Meta:
         db_table = "extended_project_subscribers"

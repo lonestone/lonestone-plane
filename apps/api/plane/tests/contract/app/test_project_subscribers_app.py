@@ -58,7 +58,10 @@ def _subscriber_ids(issue_id):
 
 @pytest.fixture
 def project(db, workspace, create_user):
-    return make_project(workspace, create_user, "SUBS")
+    project = make_project(workspace, create_user, "SUBS")
+    # The owner is a project admin, so a subscriber by default: these tests start without them.
+    ProjectSubscriber.objects.create(project=project, subscriber=create_user, is_subscribed=False)
+    return project
 
 
 @pytest.fixture
@@ -263,7 +266,10 @@ def _detail_url(workspace, project, user_id):
 
 
 def _listed(workspace, project):
-    return set(ProjectSubscriber.objects.filter(project=project).values_list("subscriber_id", flat=True))
+    """Members an admin added (the rows that subscribe); opt-out rows of admins are left out."""
+    return set(
+        ProjectSubscriber.objects.filter(project=project, is_subscribed=True).values_list("subscriber_id", flat=True)
+    )
 
 
 @pytest.mark.contract
@@ -427,3 +433,55 @@ class TestNewSubscriberFollowsExistingWorkItems:
         elsewhere = make_issue(other, author=create_user, name="Elsewhere")
         session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
         assert manager.id not in _subscriber_ids(elsewhere.id)
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestProjectAdminsAreSubscribersByDefault:
+    @pytest.fixture
+    def own_project(self, workspace, create_user):
+        return make_project(workspace, create_user, "OWN")
+
+    def test_the_admin_is_listed_and_follows_new_work_items(self, session_client, workspace, own_project, create_user):
+        author = make_user(workspace, own_project, 15)
+
+        listed = session_client.get(_list_url(workspace, own_project))
+        issue_id = _create_issue(client_for(author), workspace, own_project)
+
+        assert [(str(row["subscriber_id"]), row["default"]) for row in listed.data] == [(str(create_user.id), True)]
+        assert create_user.id in _subscriber_ids(issue_id)
+
+    def test_the_admin_removes_themselves_then_comes_back(self, session_client, workspace, own_project, create_user):
+        author = make_user(workspace, own_project, 15)
+
+        removed = session_client.delete(_detail_url(workspace, own_project, create_user.id))
+        listed = session_client.get(_list_url(workspace, own_project))
+        quiet_issue = _create_issue(client_for(author), workspace, own_project)
+        followed_while_removed = create_user.id in _subscriber_ids(quiet_issue)
+        added = session_client.post(_list_url(workspace, own_project), {"subscriber_id": str(create_user.id)}, format="json")
+
+        assert removed.status_code == status.HTTP_204_NO_CONTENT
+        assert listed.data == []
+        assert not followed_while_removed
+        assert added.status_code == status.HTTP_201_CREATED
+        assert create_user.id in _subscriber_ids(_create_issue(client_for(author), workspace, own_project))
+
+    def test_a_member_made_admin_from_the_members_page_is_a_subscriber(
+        self, session_client, workspace, own_project, create_user
+    ):
+        member = make_user(workspace, own_project, 15)
+        WorkspaceMember.objects.filter(workspace=workspace, member=member).update(role=20)
+        membership = ProjectMember.objects.get(project=own_project, member=member)
+
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/projects/{own_project.id}/members/{membership.id}/",
+            {"role": 20},
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        rows = session_client.get(_list_url(workspace, own_project)).data
+        assert {(str(row["subscriber_id"]), row["default"]) for row in rows} == {
+            (str(create_user.id), True),
+            (str(member.id), True),
+        }

@@ -524,8 +524,8 @@
     },
     "subscribers": {
       "title": "Project subscribers",
-      "description": "Subscribers follow every work item of this project: they get a notification, and an email per their notification settings, for each new work item and each change.",
-      "description_read_only": "Project admins choose who follows every work item of this project.",
+      "description": "Subscribers follow every work item of this project: they get a notification, and an email per their notification settings, for each new work item and each change. Project admins are subscribers by default and can remove themselves.",
+      "description_read_only": "Project admins are subscribers by default, and choose who else follows every work item of this project.",
       "placeholder": "Add subscribers",
       "empty": "No project subscribers yet.",
       "add_error": "Couldn't add the subscriber.",

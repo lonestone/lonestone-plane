@@ -6,11 +6,14 @@ from uuid import uuid4
 
 import pytest
 
-from plane.db.models import Issue, IssueActivity, IssueSubscriber, Notification
+from plane.db.models import ProjectMember, Issue, IssueActivity, IssueSubscriber, Notification
 from plane.extended.models import ProjectSubscriber
 from plane.extended.services.project_subscribers import (
+    add_subscriber,
     eligible_subscriber_ids,
     is_eligible_member,
+    remove_subscriber,
+    subscriber_entries,
     subscribe_to_issues,
 )
 from plane.tests.fork_builders import make_issue, make_project, make_user
@@ -26,7 +29,10 @@ def _subscriptions(issue):
 
 @pytest.fixture
 def project(db, workspace, create_user):
-    return make_project(workspace, create_user, "SUB")
+    project = make_project(workspace, create_user, "SUB")
+    # The owner is a project admin, so a subscriber by default: these tests start without them.
+    ProjectSubscriber.objects.create(project=project, subscriber=create_user, is_subscribed=False)
+    return project
 
 
 @pytest.mark.unit
@@ -180,3 +186,52 @@ class TestNewWorkItemEmail:
         notify_new_issue(issue.id)
 
         assert [message.to for message in mail.outbox] == [[second.email]]
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestAdminsAreSubscribersByDefault:
+    def test_active_admin_without_a_row_is_a_subscriber(self, workspace, create_user):
+        project = make_project(workspace, create_user, "ADM")
+        assert subscriber_entries(project.id) == [{"subscriber_id": create_user.id, "default": True}]
+        assert ProjectSubscriber.objects.filter(project=project).count() == 0
+
+    def test_admin_who_removed_themselves_is_not(self, workspace, create_user):
+        project = make_project(workspace, create_user, "ADM")
+        remove_subscriber(project.id, create_user.id)
+        assert eligible_subscriber_ids(project.id) == []
+        assert ProjectSubscriber.objects.get(project=project, subscriber=create_user).is_subscribed is False
+
+    def test_admin_who_adds_themselves_back_is_again(self, workspace, create_user):
+        project = make_project(workspace, create_user, "ADM")
+        remove_subscriber(project.id, create_user.id)
+        _, created = add_subscriber(project, create_user.id)
+        assert created
+        assert eligible_subscriber_ids(project.id) == [create_user.id]
+
+    def test_member_promoted_admin_is_a_subscriber_whatever_the_path(self, workspace, project):
+        member = make_user(workspace, project, 15)
+        # upstream promotes with bulk_update or QuerySet.update(): no signal
+        ProjectMember.objects.filter(project=project, member=member).update(role=20)
+        assert {"subscriber_id": member.id, "default": True} in subscriber_entries(project.id)
+
+    def test_demoted_admin_forgets_the_opt_out(self, workspace, project):
+        admin = make_user(workspace, project, 20)
+        remove_subscriber(project.id, admin.id)
+        membership = ProjectMember.objects.get(project=project, member=admin)
+        membership.role = 15
+        membership.save()
+        assert not ProjectSubscriber.objects.filter(project=project, subscriber=admin).exists()
+        membership.role = 20
+        membership.save()
+        assert admin.id in eligible_subscriber_ids(project.id)
+
+    def test_inactive_admin_is_not_a_subscriber(self, workspace, project):
+        former = make_user(workspace, project, 20, is_active=False)
+        assert former.id not in eligible_subscriber_ids(project.id)
+
+    def test_removing_a_member_who_is_not_admin_deletes_the_row(self, workspace, project):
+        member = make_user(workspace, project, 15)
+        _subscribe_project(project, member)
+        remove_subscriber(project.id, member.id)
+        assert not ProjectSubscriber.objects.filter(project=project, subscriber=member).exists()

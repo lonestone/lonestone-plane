@@ -57,13 +57,7 @@ export const ProjectSubscribers = observer(function ProjectSubscribers(props: Pr
     void mutate(
       ids.map(
         (id) =>
-          subscribers?.find((subscriber) => subscriber.subscriber_id === id) ?? {
-            id,
-            project_id: projectId,
-            subscriber_id: id,
-            created_by: null,
-            created_at: new Date().toISOString(),
-          }
+          subscribers?.find((subscriber) => subscriber.subscriber_id === id) ?? { subscriber_id: id, default: false }
       ),
       { revalidate: false }
     );

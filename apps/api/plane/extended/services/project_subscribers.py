@@ -55,14 +55,35 @@ def is_eligible_member(project_id: UUID | str, user_id: UUID | str) -> bool:
     return _eligible_members(project_id).filter(member_id=user_id).exists()
 
 
-def eligible_subscriber_ids(project_id: UUID | str) -> list[UUID]:
-    """Project subscribers that are still active members with the Member or Admin role."""
-    eligible = _eligible_members(project_id).filter(member_id=OuterRef("subscriber_id"))
+def _active_admin_ids(project_id: UUID | str) -> list[UUID]:
     return list(
-        ProjectSubscriber.objects.filter(project_id=project_id)
-        .filter(Exists(eligible))
-        .values_list("subscriber_id", flat=True)
+        ProjectMember.objects.filter(project_id=project_id, is_active=True, role=ROLE.ADMIN.value).values_list(
+            "member_id", flat=True
+        )
     )
+
+
+def subscriber_entries(project_id: UUID | str) -> list[dict]:
+    """The project's subscribers, as the API lists them: ``subscriber_id`` and ``default``.
+
+    ``default`` is true for an active project admin who is a subscriber because of their role (fork
+    choice, not in Plane): they have no row, or only the row of an earlier addition. Members added by
+    an admin are listed while they are active members with the Member or Admin role.
+    """
+    eligible = _eligible_members(project_id).filter(member_id=OuterRef("subscriber_id"))
+    rows = ProjectSubscriber.objects.filter(project_id=project_id)
+    added = list(rows.filter(is_subscribed=True).filter(Exists(eligible)).values_list("subscriber_id", flat=True))
+    opted_out = set(rows.filter(is_subscribed=False).values_list("subscriber_id", flat=True))
+    admins = [admin_id for admin_id in _active_admin_ids(project_id) if admin_id not in opted_out]
+    entries = [{"subscriber_id": admin_id, "default": True} for admin_id in admins]
+    entries += [{"subscriber_id": member_id, "default": False} for member_id in added if member_id not in admins]
+    return entries
+
+
+def eligible_subscriber_ids(project_id: UUID | str) -> list[UUID]:
+    """Who the project subscribes to its new work items: its active admins, unless they removed
+    themselves, and the members an admin added (still active, Member or Admin role)."""
+    return [entry["subscriber_id"] for entry in subscriber_entries(project_id)]
 
 
 def subscribe_to_issues(
@@ -113,6 +134,10 @@ def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscr
     if not is_eligible_member(project.id, user_id):
         raise SubscriberNotEligible(NOT_ELIGIBLE)
     subscriber, created = ProjectSubscriber.objects.get_or_create(project=project, subscriber_id=user_id)
+    if not subscriber.is_subscribed:  # an admin who had removed themselves
+        subscriber.is_subscribed = True
+        subscriber.save(update_fields=["is_subscribed", "updated_at"])
+        created = True
     # As in Plane, a new project subscriber also follows the project's current work items.
     # ``issue_objects`` leaves out archived and deleted work items, drafts and intake items in triage.
     subscribe_to_issues(
@@ -124,8 +149,19 @@ def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscr
 def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:
     """Stop subscribing the member to new work items; the work items they follow stay followed.
 
-    The row is deleted for good (``soft=False``): a project subscription has nothing to restore.
+    An active project admin, a subscriber by default, keeps a row with ``is_subscribed=False``. For anyone
+    else the row is deleted for good (``soft=False``): a project subscription has nothing to restore.
     """
+    if str(user_id) in {str(admin_id) for admin_id in _active_admin_ids(project_id)}:
+        ProjectSubscriber.objects.update_or_create(
+            project_id=project_id, subscriber_id=user_id, defaults={"is_subscribed": False}
+        )
+        return
+    forget_member(project_id, user_id)
+
+
+def forget_member(project_id: UUID | str, user_id: UUID | str) -> None:
+    """Drop the member's row (subscription or opt-out): they left the project, or stopped being an admin."""
     ProjectSubscriber.objects.filter(project_id=project_id, subscriber_id=user_id).delete(soft=False)
 
 

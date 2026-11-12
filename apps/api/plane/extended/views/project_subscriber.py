@@ -12,7 +12,6 @@ from rest_framework.response import Response
 from plane.app.permissions import ROLE, allow_permission
 from plane.app.views.base import BaseAPIView
 from plane.db.models import Project
-from plane.extended.models import ProjectSubscriber
 from plane.extended.permissions import can_manage_project
 from plane.extended.serializers import ProjectSubscriberSerializer
 from plane.extended.services.project_subscribers import (
@@ -20,6 +19,7 @@ from plane.extended.services.project_subscribers import (
     SubscriberNotEligible,
     add_subscriber,
     remove_subscriber,
+    subscriber_entries,
 )
 
 FORBIDDEN = {"error": "You don't have the required permissions."}
@@ -30,14 +30,18 @@ def _project(slug, project_id):
 
 
 class ProjectSubscriberEndpoint(BaseAPIView):
-    """GET the project subscribers (project admins and members); POST one (project or workspace admins)."""
+    """GET the project subscribers (project admins and members); POST one (project or workspace admins).
+
+    Active project admins are subscribers by default; DELETE on one of them records that they removed
+    themselves, POST subscribes them again.
+    """
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def get(self, request, slug, project_id):
         if _project(slug, project_id) is None:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
-        subscribers = ProjectSubscriber.objects.filter(project_id=project_id)
-        return Response(ProjectSubscriberSerializer(subscribers, many=True).data, status=status.HTTP_200_OK)
+        # Active project admins are listed by default (``default: true``), without a row of their own.
+        return Response(subscriber_entries(project_id), status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN])
     def post(self, request, slug, project_id):
