@@ -227,7 +227,7 @@ export async function addProjectMember(
   workspaceSlug: string,
   projectId: string,
   role: (typeof ROLE)[keyof typeof ROLE] = ROLE.member
-): Promise<{ id: string; email: string; displayName: string }> {
+): Promise<{ id: string; email: string; displayName: string; session: PlaneSession }> {
   const member = await signUpFreshUser(memberRequest);
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/invitations/`, {
     emails: [{ email: member.email, role }],
@@ -244,7 +244,7 @@ export async function addProjectMember(
   await call(owner, "POST", `/api/workspaces/${workspaceSlug}/projects/${projectId}/members/`, {
     members: [{ member_id: me.id, role }],
   });
-  return { id: me.id, email: member.email, displayName: me.display_name };
+  return { id: me.id, email: member.email, displayName: me.display_name, session: member };
 }
 
 export async function getCurrentUser(session: PlaneSession): Promise<{ id: string; displayName: string }> {
@@ -346,4 +346,22 @@ export async function isSubscribed(
     `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/subscribe/`
   );
   return status.subscribed;
+}
+
+/** Email preferences of the session's user (Profile → Notifications). */
+export async function setEmailPreferences(
+  session: PlaneSession,
+  preferences: Partial<Record<"property_change" | "state_change" | "comment" | "mention" | "issue_completed", boolean>>
+): Promise<void> {
+  await call(session, "PATCH", "/api/users/me/notification-preferences/", preferences);
+}
+
+export type TNotification = {
+  entity_identifier: string;
+  data: { issue_activity: { field: string; verb: string } };
+};
+
+/** In-app notifications of the session's user (Inbox, "All" tab). */
+export async function listNotifications(session: PlaneSession, workspaceSlug: string): Promise<TNotification[]> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/users/notifications/`);
 }

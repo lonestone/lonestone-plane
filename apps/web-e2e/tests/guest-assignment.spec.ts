@@ -16,6 +16,7 @@ import {
   setGuestCollaboration,
   updateWorkItem,
 } from "./helpers/plane";
+import { emailsTo, sendQueuedNotificationEmails } from "./helpers/mail";
 import { barButton, bulkBar, toggleWorkItem } from "./helpers/ui";
 import { projectIssuesUrl, workItemUrl } from "./helpers/urls";
 
@@ -27,7 +28,7 @@ async function addGuest(
   browser: Browser,
   project: ProjectFixture,
   settings: { collaboration: boolean; guestAccess: boolean }
-): Promise<{ guest: { id: string; displayName: string }; guestContext: BrowserContext }> {
+): Promise<{ guest: { id: string; email: string; displayName: string }; guestContext: BrowserContext }> {
   const guestContext = await browser.newContext();
   const guest = await addProjectMember(
     project.session,
@@ -67,6 +68,17 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
   await expect.poll(async () => (await fetchWorkItem(project, workItem)).assignee_ids).toEqual([guest.id]);
   await page.reload();
   await expect(page.getByText(`${guest.displayName} · Guest`).first()).toBeVisible();
+
+  // the guest is told by email, as any assignee
+  await expect
+    .poll(
+      async () => {
+        sendQueuedNotificationEmails();
+        return (await emailsTo(guest.email)).map((email) => email.Subject);
+      },
+      { timeout: 30_000, intervals: [1_000, 2_000] }
+    )
+    .toEqual(expect.arrayContaining([expect.stringMatching(/ Review the quote$/)]));
   await guestContext.close();
 });
 

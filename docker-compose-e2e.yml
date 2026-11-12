@@ -10,9 +10,35 @@
 # - Separate compose project (plane-e2e) and host port (API on 8200), so it runs
 #   next to the dev stack (docker-compose-local.yml) without sharing anything.
 # - Data dirs are tmpfs: every run starts from an empty, freshly migrated database.
-# - No Celery worker: the UI flows under test do not wait on background tasks.
+# - A Celery worker runs the background tasks (activities, notifications, emails). The beat is left
+#   out: the suite sends the queued notification emails itself (helpers/mail.ts).
+# - Mailpit catches every email; the suite reads it through its API on host port 8225.
 
 name: plane-e2e
+
+# Shared by the API and the worker.
+x-api-environment: &api-environment
+  POSTGRES_HOST: e2e-db
+  DATABASE_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@e2e-db:5432/${POSTGRES_DB:-plane}
+  REDIS_HOST: e2e-redis
+  REDIS_URL: redis://e2e-redis:6379/
+  RABBITMQ_HOST: e2e-mq
+  USE_MINIO: "1"
+  AWS_S3_ENDPOINT_URL: http://e2e-minio:9000
+  # The e2e web dev server (apps/web-e2e/playwright.config.ts) runs on 3200.
+  CORS_ALLOWED_ORIGINS: http://localhost:3200
+  APP_BASE_URL: http://localhost:3200
+  WEB_URL: http://localhost:8200
+  ENABLE_SIGNUP: "1"
+  ENABLE_EMAIL_PASSWORD: "1"
+  # Read once by configure_instance into the (fresh) instance configuration.
+  EMAIL_HOST: e2e-mailpit
+  EMAIL_PORT: "1025"
+  EMAIL_USE_TLS: "0"
+  EMAIL_USE_SSL: "0"
+  EMAIL_FROM: Plane e2e <plane@e2e.plane.local>
+  # plane.settings.local prints emails to the console unless told otherwise.
+  EMAIL_BACKEND: django.core.mail.backends.smtp.EmailBackend
 
 services:
   e2e-db:
@@ -81,7 +107,15 @@ services:
       timeout: 5s
       retries: 10
 
+  e2e-mailpit:
+    image: axllent/mailpit:v1.21.8
+    networks:
+      - e2e_env
+    ports:
+      - "8225:8025"
+
   e2e-api:
+    image: plane-e2e-api
     build:
       context: ./apps/api
       dockerfile: Dockerfile.dev
@@ -91,20 +125,7 @@ services:
       - e2e_env
     env_file:
       - ./apps/api/.env
-    environment:
-      POSTGRES_HOST: e2e-db
-      DATABASE_URL: postgresql://${POSTGRES_USER:-plane}:${POSTGRES_PASSWORD:-plane}@e2e-db:5432/${POSTGRES_DB:-plane}
-      REDIS_HOST: e2e-redis
-      REDIS_URL: redis://e2e-redis:6379/
-      RABBITMQ_HOST: e2e-mq
-      USE_MINIO: "1"
-      AWS_S3_ENDPOINT_URL: http://e2e-minio:9000
-      # The e2e web dev server (apps/web-e2e/playwright.config.ts) runs on 3200.
-      CORS_ALLOWED_ORIGINS: http://localhost:3200
-      APP_BASE_URL: http://localhost:3200
-      WEB_URL: http://localhost:8200
-      ENABLE_SIGNUP: "1"
-      ENABLE_EMAIL_PASSWORD: "1"
+    environment: *api-environment
     volumes:
       - ./apps/api:/code
     working_dir: /code
@@ -119,6 +140,8 @@ services:
         condition: service_healthy
       e2e-minio:
         condition: service_healthy
+      e2e-mailpit:
+        condition: service_started
     # Same steps as bin/docker-entrypoint-api-local.sh, plus migrations (no separate migrator).
     entrypoint:
       - /bin/sh
@@ -139,6 +162,30 @@ services:
       timeout: 5s
       retries: 60
       start_period: 30s
+
+  e2e-worker:
+    image: plane-e2e-api
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile.dev
+      args:
+        DOCKER_BUILDKIT: 1
+    networks:
+      - e2e_env
+    env_file:
+      - ./apps/api/.env
+    environment:
+      <<: *api-environment
+      # Same settings as the API (runserver --settings=plane.settings.local).
+      DJANGO_SETTINGS_MODULE: plane.settings.local
+    volumes:
+      - ./apps/api:/code
+    working_dir: /code
+    depends_on:
+      # The API migrates the database.
+      e2e-api:
+        condition: service_healthy
+    entrypoint: ["celery", "-A", "plane", "worker", "-l", "info"]
 
 networks:
   e2e_env:
