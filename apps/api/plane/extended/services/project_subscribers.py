@@ -98,6 +98,24 @@ def subscribe_new_issue(issue: Issue) -> None:
     subscribe_to_issues(issue.project_id, eligible_subscriber_ids(issue.project_id), [issue.id])
 
 
+def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscriber, bool]:
+    """Make an eligible project member a project subscriber; returns the row and whether it is new.
+
+    Raises ``SubscriberNotEligible`` for anyone but an active member with the Member or Admin role.
+    """
+    if not is_eligible_member(project.id, user_id):
+        raise SubscriberNotEligible(NOT_ELIGIBLE)
+    return ProjectSubscriber.objects.get_or_create(project=project, subscriber_id=user_id)
+
+
+def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:
+    """Stop subscribing the member to new work items; the work items they follow stay followed.
+
+    The row is deleted for good (``soft=False``): a project subscription has nothing to restore.
+    """
+    ProjectSubscriber.objects.filter(project_id=project_id, subscriber_id=user_id).delete(soft=False)
+
+
 def _activity(issue: Issue) -> dict:
     """The ``issue_activity`` part of upstream's notification data, for "created the work item".
 

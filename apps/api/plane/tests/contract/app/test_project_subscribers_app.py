@@ -16,8 +16,10 @@ from plane.db.models import (
     EmailNotificationLog,
     IssueSubscriber,
     Notification,
+    ProjectMember,
     State,
     UserNotificationPreference,
+    WorkspaceMember,
 )
 from plane.extended.models import ProjectSubscriber
 from plane.extended.tasks import notify_project_subscribers_of_new_issue
@@ -183,3 +185,119 @@ class TestNewWorkItemNotifiesProjectSubscribers:
     ):
         issue_id = self._create(django_capture_on_commit_callbacks, _client(author), workspace, project)
         assert not Notification.objects.filter(entity_identifier=issue_id).exists()
+
+
+SUBSCRIBERS_URL = "/api/extended/workspaces/{slug}/projects/{project_id}/subscribers/"
+SUBSCRIBER_DETAIL_URL = "/api/extended/workspaces/{slug}/projects/{project_id}/subscribers/{subscriber_id}/"
+
+
+def _list_url(workspace, project):
+    return SUBSCRIBERS_URL.format(slug=workspace.slug, project_id=project.id)
+
+
+def _detail_url(workspace, project, user_id):
+    return SUBSCRIBER_DETAIL_URL.format(slug=workspace.slug, project_id=project.id, subscriber_id=user_id)
+
+
+def _listed(workspace, project):
+    return set(ProjectSubscriber.objects.filter(project=project).values_list("subscriber_id", flat=True))
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestProjectSubscribersApi:
+    def test_admin_and_member_list_guest_does_not(self, session_client, workspace, project, manager):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        guest = _make_user(workspace, project, 5)
+
+        response = session_client.get(_list_url(workspace, project))
+        assert response.status_code == status.HTTP_200_OK
+        assert [str(row["subscriber_id"]) for row in response.data] == [str(manager.id)]
+        assert _client(manager).get(_list_url(workspace, project)).status_code == status.HTTP_200_OK
+        assert _client(guest).get(_list_url(workspace, project)).status_code == status.HTTP_403_FORBIDDEN
+
+    def test_admin_adds_a_subscriber_once(self, session_client, workspace, project, manager):
+        first = session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
+        again = session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert str(first.data["subscriber_id"]) == str(manager.id)
+        assert again.status_code == status.HTTP_200_OK
+        assert ProjectSubscriber.objects.filter(project=project, subscriber=manager).count() == 1
+
+    @pytest.mark.parametrize(("role", "is_active"), [(5, True), (15, False)])
+    def test_guest_or_former_member_cannot_be_added(self, session_client, workspace, project, role, is_active):
+        user = _make_user(workspace, project, role, is_active=is_active)
+        response = session_client.post(_list_url(workspace, project), {"subscriber_id": str(user.id)}, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data == {"error": "subscriber_not_eligible"}
+
+    def test_outsider_cannot_be_added(self, session_client, workspace, project, create_user):
+        other = _make_project(workspace, create_user, "OTHR")
+        outsider = _make_user(workspace, other, 15)
+        response = session_client.post(
+            _list_url(workspace, project), {"subscriber_id": str(outsider.id)}, format="json"
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    @pytest.mark.parametrize("payload", [{}, {"subscriber_id": "not-a-uuid"}])
+    def test_invalid_subscriber_id(self, session_client, workspace, project, payload):
+        response = session_client.post(_list_url(workspace, project), payload, format="json")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_member_cannot_change_the_subscribers(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=author)
+        client = _client(manager)
+        add = client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
+        remove = client.delete(_detail_url(workspace, project, author.id))
+
+        assert add.status_code == status.HTTP_403_FORBIDDEN
+        assert remove.status_code == status.HTTP_403_FORBIDDEN
+        assert _listed(workspace, project) == {author.id}
+
+    def test_workspace_admin_member_of_the_project_adds(self, workspace, project, manager):
+        workspace_admin = UserFactory(username=uuid4().hex)
+        WorkspaceMemberFactory(workspace=workspace, member=workspace_admin, role=20)
+        ProjectMemberFactory(project=project, member=workspace_admin, workspace=workspace, role=15)
+
+        response = _client(workspace_admin).post(
+            _list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json"
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+
+    def test_remove_keeps_the_work_items_followed(self, session_client, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        issue_id = _create_issue(_client(author), workspace, project)
+
+        first = session_client.delete(_detail_url(workspace, project, manager.id))
+        again = session_client.delete(_detail_url(workspace, project, manager.id))
+
+        assert first.status_code == status.HTTP_204_NO_CONTENT
+        assert again.status_code == status.HTTP_204_NO_CONTENT
+        assert _listed(workspace, project) == set()
+        assert manager.id in _subscriber_ids(issue_id)
+        assert manager.id not in _subscriber_ids(_create_issue(_client(author), workspace, project))
+
+    def test_project_of_another_workspace(self, session_client, workspace, project, manager):
+        response = session_client.get(
+            SUBSCRIBERS_URL.format(slug="no-such-workspace", project_id=project.id)
+        )
+        assert response.status_code in (status.HTTP_403_FORBIDDEN, status.HTTP_404_NOT_FOUND)
+
+    def test_member_removed_from_the_project_is_no_longer_listed(self, session_client, workspace, project, manager):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        membership = ProjectMember.objects.get(project=project, member=manager)
+
+        response = session_client.delete(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/{membership.id}/"
+        )
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert _listed(workspace, project) == set()
+
+    def test_member_removed_from_the_workspace_is_no_longer_listed(self, session_client, workspace, project, manager):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        membership = WorkspaceMember.objects.get(workspace=workspace, member=manager)
+
+        response = session_client.delete(f"/api/workspaces/{workspace.slug}/members/{membership.id}/")
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert _listed(workspace, project) == set()

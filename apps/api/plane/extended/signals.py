@@ -8,8 +8,9 @@ from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
-from plane.db.models import Issue
-from plane.extended.services.project_subscribers import subscribe_new_issue
+from plane.db.models import Issue, ProjectMember, WorkspaceMember
+from plane.extended.models import ProjectSubscriber
+from plane.extended.services.project_subscribers import remove_subscriber, subscribe_new_issue
 from plane.extended.tasks import notify_project_subscribers_of_new_issue
 
 
@@ -29,3 +30,26 @@ def subscribe_project_subscribers(sender, instance, created, raw=False, **kwargs
     subscribe_new_issue(instance)
     issue_id = str(instance.id)
     transaction.on_commit(lambda: notify_project_subscribers_of_new_issue.delay(issue_id))
+
+
+@receiver(post_save, sender=ProjectMember, dispatch_uid="extended_remove_departed_project_subscriber")
+def remove_departed_project_subscriber(sender, instance, created, raw=False, **kwargs):
+    """A member who leaves the project, or is removed from it, is no longer a project subscriber (LONESTONEP-8).
+
+    Upstream deactivates the membership (``is_active=False``) rather than deleting it. Coming back to
+    the project does not make them a subscriber again: an admin decides.
+    """
+    if raw or instance.is_active:
+        return
+    remove_subscriber(instance.project_id, instance.member_id)
+
+
+@receiver(post_save, sender=WorkspaceMember, dispatch_uid="extended_remove_departed_workspace_subscriber")
+def remove_departed_workspace_subscriber(sender, instance, created, raw=False, **kwargs):
+    """Same, for a member who leaves the workspace: upstream deactivates their project memberships with
+    ``QuerySet.update()``, which sends no ``post_save`` for ``ProjectMember``."""
+    if raw or instance.is_active:
+        return
+    ProjectSubscriber.objects.filter(
+        project__workspace_id=instance.workspace_id, subscriber_id=instance.member_id
+    ).delete(soft=False)
