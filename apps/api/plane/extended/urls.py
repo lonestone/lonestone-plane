@@ -11,6 +11,7 @@ from plane.extended.views import (
     ProjectIssueBulkUpdateEndpoint,
     ProjectSubscriberDetailEndpoint,
     ProjectSubscriberEndpoint,
+    ProjectSubscribersAnnouncementEndpoint,
     ProjectTemplateApplyEndpoint,
     ProjectTemplateEndpoint,
     ProjectTemplatePreviewEndpoint,
@@ -56,5 +57,10 @@ urlpatterns = [
         "workspaces/<str:slug>/projects/<uuid:project_id>/subscribers/<uuid:subscriber_id>/",
         ProjectSubscriberDetailEndpoint.as_view(),
         name="extended-project-subscriber-detail",
+    ),
+    path(
+        "users/me/announcements/project-subscribers/",
+        ProjectSubscribersAnnouncementEndpoint.as_view(),
+        name="extended-project-subscribers-announcement",
     ),
 ]

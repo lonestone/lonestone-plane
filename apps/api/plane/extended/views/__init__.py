@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
+from .announcement import ProjectSubscribersAnnouncementEndpoint
 from .guest_collaboration import ProjectGuestCollaborationEndpoint
 from .issue_bulk_update import ProjectIssueBulkUpdateEndpoint
 from .project_subscriber import ProjectSubscriberDetailEndpoint, ProjectSubscriberEndpoint
@@ -19,4 +20,5 @@ __all__ = (
     "ProjectIssueBulkUpdateEndpoint",
     "ProjectSubscriberEndpoint",
     "ProjectSubscriberDetailEndpoint",
+    "ProjectSubscribersAnnouncementEndpoint",
 )

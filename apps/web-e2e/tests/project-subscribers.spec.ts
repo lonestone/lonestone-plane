@@ -15,7 +15,7 @@ import {
   ROLE,
   setEmailPreferences,
 } from "./helpers/plane";
-import { emailsTo } from "./helpers/mail";
+import { djangoShell, emailsTo } from "./helpers/mail";
 import { projectMembersSettingsUrl, WEB_URL, workItemUrl } from "./helpers/urls";
 
 // LONESTONEP-8: project admins are project subscribers by default and choose the others in Project
@@ -156,4 +156,33 @@ test("a project subscriber who turned off property change emails is only told in
   expect((await subjectsTo(member.email)).filter((subject) => subject.includes("Footer links"))).toEqual([]);
   await context.close();
   await witnessContext.close();
+});
+
+test("a project admin of before the release is told once, in a dialog, how to stop following", async ({
+  page,
+  project,
+}) => {
+  const owner = await getCurrentUser(project.session);
+  // what migration 0006 does for the project admins of the release
+  djangoShell(
+    `from plane.extended.models import UserAnnouncement; UserAnnouncement.objects.create(user_id="${owner.id}", key="project_subscribers")`
+  );
+
+  await page.goto(projectMembersSettingsUrl(project.workspaceSlug, project.projectId));
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByText("You now follow your projects' new work items")).toBeVisible({ timeout: 30_000 });
+  await expect(dialog.getByRole("link", { name: "Bulk edit" })).toBeVisible();
+  await expect(dialog.getByRole("img", { name: /Project subscribers picker/ })).toBeVisible();
+
+  const seen = page.waitForResponse(
+    (response) =>
+      response.url().includes("/announcements/project-subscribers/") && response.request().method() === "POST"
+  );
+  await dialog.getByRole("button", { name: "Got it" }).click();
+  expect((await seen).ok()).toBe(true);
+  await expect(dialog).toBeHidden();
+
+  await page.reload();
+  await expect(picker(page)).toBeVisible();
+  await expect(page.getByText("You now follow your projects' new work items")).toHaveCount(0);
 });

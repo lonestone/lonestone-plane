@@ -21,15 +21,15 @@ export type TEmail = { ID: string; Subject: string; To: { Address: string }[] };
  * minutes (`stack_email_notification`). The e2e stack has no beat: run the task now.
  */
 export function sendQueuedNotificationEmails(): void {
-  execFileSync("docker", [
-    "exec",
-    WORKER_CONTAINER,
-    "python",
-    "manage.py",
-    "shell",
-    "-c",
-    "from plane.bgtasks.email_notification_task import stack_email_notification; stack_email_notification()",
-  ]);
+  djangoShell("from plane.bgtasks.email_notification_task import stack_email_notification; stack_email_notification()");
+}
+
+/**
+ * Runs Python in the e2e API's Django shell (worker container), for what the app API cannot do:
+ * a beat task, the rows a data migration creates.
+ */
+export function djangoShell(code: string): void {
+  execFileSync("docker", ["exec", WORKER_CONTAINER, "python", "manage.py", "shell", "-c", code]);
 }
 
 /** Emails received by this address, newest first. */

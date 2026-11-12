@@ -529,7 +529,15 @@
       "placeholder": "Ajouter des abonnés",
       "empty": "Aucun abonné pour l'instant.",
       "add_error": "Impossible d'ajouter l'abonné.",
-      "remove_error": "Impossible de retirer l'abonné."
+      "remove_error": "Impossible de retirer l'abonné.",
+      "announcement": {
+        "title": "Vous suivez désormais les nouveaux tickets de vos projets",
+        "projects": "Vous êtes admin de ces projets :",
+        "body": "Désormais, vous recevez une notification, et un email selon vos réglages de notification, pour chaque nouveau ticket créé dans ces projets.",
+        "how_to": "Pour vous désabonner, ouvrez les réglages du projet → Members → Project subscribers, et décochez-vous (« You ») :",
+        "image_alt": "Le sélecteur Project subscribers, avec « You » coché",
+        "got_it": "J'ai compris"
+      }
     }
   }
 }
