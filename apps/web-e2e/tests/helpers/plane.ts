@@ -320,3 +320,30 @@ export async function getProject(
 ): Promise<{ id: string; guest_view_all_features: boolean }> {
   return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/${projectId}/`);
 }
+
+/** Makes a project member a project subscriber (LONESTONEP-8): they follow every work item of the project. */
+export async function addProjectSubscriber(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  subscriberId: string
+): Promise<void> {
+  await call(session, "POST", `/api/extended/workspaces/${workspaceSlug}/projects/${projectId}/subscribers/`, {
+    subscriber_id: subscriberId,
+  });
+}
+
+/** Whether the session's user is a subscriber of the work item. */
+export async function isSubscribed(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  workItemId: string
+): Promise<boolean> {
+  const status = await call<{ subscribed: boolean }>(
+    session,
+    "GET",
+    `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/subscribe/`
+  );
+  return status.subscribed;
+}

@@ -521,6 +521,15 @@
           }
         }
       }
+    },
+    "subscribers": {
+      "title": "Project subscribers",
+      "description": "Les abonnés suivent tous les work items du projet : ils reçoivent une notification, et un email selon leurs réglages de notification, pour chaque nouveau work item et chaque changement.",
+      "description_read_only": "Les admins du projet choisissent qui suit tous les work items du projet.",
+      "placeholder": "Ajouter des abonnés",
+      "empty": "Aucun abonné pour l'instant.",
+      "add_error": "Impossible d'ajouter l'abonné.",
+      "remove_error": "Impossible de retirer l'abonné."
     }
   }
 }

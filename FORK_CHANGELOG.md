@@ -17,6 +17,7 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 | End-to-end tests (LONESTONEP-5)            | (to be opened) | None: test tooling of the fork                                                                                       |
 | Attachment file types (LONESTONEP-9)       | (to be opened) | None: bug fix. Plane accepts these attachments but its upload type detection rejects them                            |
 | Assign work items to guests (LONESTONEP-4) | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: Commenter role (Pro and above), custom roles (Enterprise) |
+| Project subscribers (LONESTONEP-8)         | (to be opened) | Project subscribers (Enterprise Grid)                                                                                |
 
 ## Upstream files touched
 
@@ -188,6 +189,14 @@ Accepted on purpose (2026-11-10): the "Members" field of a module is also a mult
 
 Left out on purpose: `apps/web/core/components/dropdowns/member/member-options.tsx` (guest badge), `issue-detail-widgets/sub-issues/title-actions.tsx` (sub-work-item group-by) and `work-item-filters/filters-hoc/project-level.tsx` (assignee filter) carry upstream oxlint warnings that the pre-commit hook rejects once the file is staged. Guests read "Name · Guest" through `getUserDetails` instead of a badge; sub-work-item grouping and the assignee filter do not list guests yet.
 
+### Project subscribers (LONESTONEP-8)
+
+| File                                                             | Status   | Change                                                                                                                                                                                                     |
+| ---------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/unit/extended/test_project_subscribers.py` | Added    | Unit tests of the project subscriber rule and subscriptions                                                                                                                                                |
+| `packages/i18n/src/locales/en/project-settings.json`             | Modified | `subscribers` keys appended at the end of `project_settings`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours |
+| `packages/i18n/src/locales/fr/project-settings.json`             | Modified | `subscribers` keys appended at the end of `project_settings`; no upstream key changed. Why: the fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours |
+
 ## Upstream dependencies
 
 Upstream files the fork relies on without changing them. Only the LONESTONEP-5 features are inventoried so far; the dependencies of the earlier features are still to be listed.
@@ -240,6 +249,10 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 | `apps/api/plane/app/permissions/base.py`                                                            | `ROLE` (`GUEST` = 5, `MEMBER` = 15)                                                                                                                                      | `apps/api/plane/extended/rules/guest_assignment.py`                              |
 | `apps/api/plane/settings/common.py`                                                                 | `REST_FRAMEWORK` "anon" throttle (30/minute, not configurable) keyed on the client address, which DRF reads from `X-Forwarded-For`                                       | `apps/web-e2e/tests/helpers/plane.ts` (`signUpFreshUser`)                        |
 | `apps/web/core/components/issues/issue-detail/`, `modules/form.tsx`, `issues/issue-layouts/kanban/` | "Add assignees" button, the comment editor (a contenteditable without accessible name), the "Lead" button of the module form, the kanban column header (name then count) | `apps/web-e2e/tests/guest-assignment.spec.ts`                                    |
+
+### Project subscribers (LONESTONEP-8)
+
+No upstream file yet; rows are added as the work goes.
 
 ## Features not in Plane
 

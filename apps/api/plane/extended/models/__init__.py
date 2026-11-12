@@ -3,6 +3,7 @@
 # See the LICENSE file for details.
 
 from .guest_collaboration import ProjectGuestCollaboration
+from .project_subscriber import ProjectSubscriber
 from .template import ProjectTemplate, Template
 
-__all__ = ("Template", "ProjectTemplate", "ProjectGuestCollaboration")
+__all__ = ("Template", "ProjectTemplate", "ProjectGuestCollaboration", "ProjectSubscriber")
