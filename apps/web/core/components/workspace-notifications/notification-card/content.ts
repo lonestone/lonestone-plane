@@ -6,9 +6,10 @@
 
 import { replaceUnderscoreIfSnakeCase } from "@plane/utils";
 import type { TNotificationContentMap } from "@/components/workspace-notifications/sidebar/notification-card/content";
+import { FORK_NOTIFICATION_CONTENT_MAP } from "@/plane-web/components/workspace-notifications/content-map";
 
 // Additional notification content map for CE (empty - EE extends this)
-export const ADDITIONAL_NOTIFICATION_CONTENT_MAP: TNotificationContentMap = {};
+export const ADDITIONAL_NOTIFICATION_CONTENT_MAP: TNotificationContentMap = FORK_NOTIFICATION_CONTENT_MAP;
 
 // Fallback action renderer for fields not in the map
 export const renderAdditionalAction = (notificationField: string, verb: string | undefined) => {

@@ -121,3 +121,42 @@ class TestSubscribeToIssues:
         subscribe_to_issues(project.id, [], [uuid4()])
         subscribe_to_issues(project.id, [member.id], [])
         assert not IssueSubscriber.objects.filter(subscriber=member).exists()
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestNewIssueSignal:
+    def test_new_issue_subscribes_the_project_subscribers(self, workspace, project):
+        manager = _make_user(workspace, project, 15)
+        _subscribe_project(project, manager)
+        issue = _make_issue(project, "New")
+        assert _subscriptions(issue) == [manager.id]
+
+    def test_updating_an_issue_subscribes_nobody(self, workspace, project):
+        issue = _make_issue(project, "Existing")
+        manager = _make_user(workspace, project, 15)
+        _subscribe_project(project, manager)
+        issue.name = "Renamed"
+        issue.save()
+        assert _subscriptions(issue) == []
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestNewWorkItemEmail:
+    def test_upstream_email_payload_keeps_the_creation(self, workspace, project, create_user):
+        from plane.bgtasks.email_notification_task import create_payload
+        from plane.db.models import EmailNotificationLog
+        from plane.extended.services.project_subscribers import notify_new_issue
+
+        manager = _make_user(workspace, project, 15)
+        _subscribe_project(project, manager)
+        issue = _make_issue(project, "Homepage mock-up")
+        Issue.objects.filter(pk=issue.pk).update(created_by=create_user)
+        notify_new_issue(issue.id)
+
+        log = EmailNotificationLog.objects.get(receiver=manager, entity_identifier=issue.id)
+        payload = create_payload({str(create_user.id): [log.data]})
+        changes = payload[str(create_user.id)]
+        assert changes["project_subscription"]["new_value"] == ["Homepage mock-up"]
+        assert "activity_time" in changes
