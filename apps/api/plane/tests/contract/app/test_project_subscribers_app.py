@@ -20,6 +20,7 @@ from plane.db.models import (
     Issue,
     IssueSubscriber,
     Notification,
+    Project,
     ProjectMember,
     State,
     UserNotificationPreference,
@@ -485,3 +486,73 @@ class TestProjectAdminsAreSubscribersByDefault:
             (str(create_user.id), True),
             (str(member.id), True),
         }
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestSubscriberTurnedGuestStopsFollowing:
+    """A member turned guest only opens the work items they created (unless "Guest access" is on): they
+    must not keep receiving the notifications of the others."""
+
+    @pytest.fixture(autouse=True)
+    def run_tasks_inline(self, monkeypatch):
+        monkeypatch.setattr(issue_activity, "delay", issue_activity.run)
+        monkeypatch.setattr(notifications, "delay", notifications.run)
+        monkeypatch.setattr(
+            notify_project_subscribers_of_new_issue, "delay", notify_project_subscribers_of_new_issue.run
+        )
+        monkeypatch.setattr("plane.extended.signals.transaction.on_commit", lambda func, *args, **kwargs: func())
+
+    def _demote_in_project(self, session_client, workspace, project, user):
+        membership = ProjectMember.objects.get(project=project, member=user)
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/{membership.id}/",
+            {"role": 5},
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK, response.data
+
+    def _changes(self, workspace, project, author, issue_id):
+        url = f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{issue_id}/"
+        client = client_for(author)
+        client.patch(url, {"priority": "high"}, format="json")
+        client.post(f"{url}comments/", {"comment_html": "<p>Secret detail</p>"}, format="json")
+
+    def _notified(self, user, issue_id):
+        return (
+            Notification.objects.filter(receiver=user, entity_identifier=issue_id).count(),
+            EmailNotificationLog.objects.filter(receiver=user, entity_identifier=issue_id).count(),
+        )
+
+    def test_demoted_in_the_project(self, session_client, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        own = _create_issue(client_for(manager), workspace, project)
+
+        self._demote_in_project(session_client, workspace, project, manager)
+        before = self._notified(manager, others)
+        self._changes(workspace, project, author, others)
+
+        assert manager.id not in _subscriber_ids(others)
+        assert manager.id in _subscriber_ids(own)
+        assert self._notified(manager, others) == before
+
+    def test_demoted_in_the_workspace(self, session_client, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        membership = WorkspaceMember.objects.get(workspace=workspace, member=manager)
+
+        response = session_client.patch(f"/api/workspaces/{workspace.slug}/members/{membership.id}/", {"role": 5}, format="json")
+
+        assert response.status_code == status.HTTP_200_OK, response.data
+        assert ProjectMember.objects.get(project=project, member=manager).role == 5
+        assert manager.id not in _subscriber_ids(others)
+
+    def test_guest_access_keeps_the_follows(self, session_client, workspace, project, manager, author):
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+
+        self._demote_in_project(session_client, workspace, project, manager)
+
+        assert manager.id in _subscriber_ids(others)

@@ -165,6 +165,25 @@ def forget_member(project_id: UUID | str, user_id: UUID | str) -> None:
     ProjectSubscriber.objects.filter(project_id=project_id, subscriber_id=user_id).delete(soft=False)
 
 
+def revoke_unreadable_follows(user_id: UUID | str, project_ids: Iterable[UUID | str]) -> None:
+    """Unsubscribe a guest from the work items of these projects that they can no longer open.
+
+    Upstream sends a work item's notifications to its subscribers who are active members of the project,
+    whatever their role, but a guest only opens the work items they created, unless the project has
+    "Guest access" on (``guest_view_all_features``, read gate of ``IssueViewSet.retrieve``). The
+    subscriptions a project subscription created (or any other one) would leak titles, values and
+    comments to a member turned guest. Soft deletion, as upstream's "Unsubscribe".
+    """
+    project_ids = list(
+        Project.objects.filter(pk__in=list(project_ids), guest_view_all_features=False).values_list("id", flat=True)
+    )
+    if not project_ids:
+        return
+    IssueSubscriber.objects.filter(project_id__in=project_ids, subscriber_id=user_id).exclude(
+        issue__created_by_id=user_id
+    ).delete()
+
+
 def _activity(issue: Issue) -> dict:
     """The ``issue_activity`` part of upstream's notification data, for "created the work item"."""
     return {
