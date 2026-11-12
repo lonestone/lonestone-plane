@@ -235,3 +235,17 @@ class TestAdminsAreSubscribersByDefault:
         _subscribe_project(project, member)
         remove_subscriber(project.id, member.id)
         assert not ProjectSubscriber.objects.filter(project=project, subscriber=member).exists()
+
+    def test_work_items_of_a_bot_are_not_announced(self, workspace, project, create_user):
+        from plane.extended.services.project_subscribers import notify_new_issue
+
+        manager = make_user(workspace, project, 15)
+        _subscribe_project(project, manager)
+        bot = make_user(workspace, project, 20)
+        type(bot).objects.filter(pk=bot.pk).update(is_bot=True)
+        issue = make_issue(project, "Sample work item", author=bot)
+
+        notify_new_issue(issue.id)
+
+        assert manager.id in _subscriptions(issue)
+        assert not Notification.objects.filter(receiver=manager).exists()

@@ -218,6 +218,10 @@ def notify_new_issue(issue_id: UUID | str) -> None:
     )
     if issue is None or issue.created_by_id is None:
         return  # nobody to show as the author
+    if issue.created_by.is_bot:
+        # Bot authors: the sample work items upstream seeds in a new workspace
+        # (``bgtasks/workspace_seed_task.py``) would flood the admin's Inbox.
+        return
     assignees = set(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
     receivers = [
         subscriber_id
