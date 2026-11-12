@@ -6,28 +6,18 @@
 
 import { execFileSync } from "node:child_process";
 
-/**
- * Emails of the e2e stack: Mailpit (docker-compose-e2e.yml) catches them all, and its API is
- * published on the host. Each test signs up fresh users, so looking a recipient up is enough to
- * isolate a test's emails.
- */
+/** Mailpit of docker-compose-e2e.yml. Each test signs up fresh users, so a recipient isolates its emails. */
 export const MAILPIT_URL = "http://localhost:8225";
 const WORKER_CONTAINER = "plane-e2e-e2e-worker-1";
 
 export type TEmail = { ID: string; Subject: string; To: { Address: string }[] };
 
-/**
- * Plane sends work item notification emails in batches, from a beat task that runs every 5
- * minutes (`stack_email_notification`). The e2e stack has no beat: run the task now.
- */
+/** Upstream batches work item emails in a beat task, absent from the e2e stack: run it now. */
 export function sendQueuedNotificationEmails(): void {
   djangoShell("from plane.bgtasks.email_notification_task import stack_email_notification; stack_email_notification()");
 }
 
-/**
- * Runs Python in the e2e API's Django shell (worker container), for what the app API cannot do:
- * a beat task, the rows a data migration creates.
- */
+/** For what the API cannot do: run a beat task, create the rows of a data migration. */
 export function djangoShell(code: string): void {
   execFileSync("docker", ["exec", WORKER_CONTAINER, "python", "manage.py", "shell", "-c", code]);
 }

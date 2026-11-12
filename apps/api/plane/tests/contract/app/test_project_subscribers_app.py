@@ -127,9 +127,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         monkeypatch.setattr(
             notify_project_subscribers_of_new_issue, "delay", notify_project_subscribers_of_new_issue.run
         )
-        # In production, each ``transaction.atomic()`` block commits on its own (no ATOMIC_REQUESTS), so
-        # ``on_commit`` callbacks run as soon as their block ends, in the middle of the request. Run them
-        # at once here too, rather than at the end of the request.
+        # No ATOMIC_REQUESTS in production: ``on_commit`` callbacks run mid-request, as here.
         monkeypatch.setattr("plane.extended.signals.transaction.on_commit", lambda func, *args, **kwargs: func())
 
     def _create(self, client, workspace, project, **data):
@@ -141,8 +139,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert response.status_code == status.HTTP_201_CREATED, response.data
         return response.data["id"]
 
-    def test_project_subscriber_is_told_of_a_new_work_item(
-        self, workspace, project, manager, author):
+    def test_project_subscriber_is_told_of_a_new_work_item(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         issue_id = self._create(client_for(author), workspace, project)
 
@@ -157,8 +154,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert "New ticket" in html and "/test-workspace/browse/SUBS-1/" in html
         assert not EmailNotificationLog.objects.filter(entity_identifier=issue_id).exists()
 
-    def test_email_follows_the_property_changes_preference(
-        self, workspace, project, manager, author):
+    def test_email_follows_the_property_changes_preference(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         UserNotificationPreference.objects.filter(user=manager).update(property_change=False)
         issue_id = self._create(client_for(author), workspace, project)
@@ -166,18 +162,14 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
         assert not [message for message in mail.outbox if message.to == [manager.email]]
 
-    def test_author_is_not_told_of_their_own_work_item(
-        self, workspace, project, manager):
+    def test_author_is_not_told_of_their_own_work_item(self, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         issue_id = self._create(client_for(manager), workspace, project)
         assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
 
-    def test_assigned_subscriber_only_gets_the_assignment(
-        self, workspace, project, manager, author):
+    def test_assigned_subscriber_only_gets_the_assignment(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = self._create(
-            client_for(author), workspace, project, assignee_ids=[str(manager.id)]
-        )
+        issue_id = self._create(client_for(author), workspace, project, assignee_ids=[str(manager.id)])
         fields = _notified_fields(manager, issue_id)
         assert "project_subscription" not in fields
         assert "assignees" in fields
@@ -197,9 +189,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         fields = _notified_fields(manager, issue_id)
         assert "state" in fields
 
-    def test_unsubscribing_from_one_work_item_keeps_the_project_subscription(
-        self, workspace, project, manager, author
-    ):
+    def test_unsubscribing_from_one_work_item_keeps_the_project_subscription(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         issue_id = self._create(client_for(author), workspace, project)
         url = f"{ISSUES_URL.format(slug=workspace.slug, project_id=project.id)}{issue_id}/"
@@ -248,8 +238,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         issue_id = Issue.objects.get(name="Drafted ticket").id
         assert "project_subscription" in _notified_fields(manager, issue_id)
 
-    def test_nobody_is_told_without_project_subscribers(
-        self, workspace, project, manager, author):
+    def test_nobody_is_told_without_project_subscribers(self, workspace, project, manager, author):
         issue_id = self._create(client_for(author), workspace, project)
         assert not Notification.objects.filter(entity_identifier=issue_id).exists()
 
@@ -414,9 +403,7 @@ class TestNewSubscriberFollowsExistingWorkItems:
         IssueSubscriber.objects.create(project=project, workspace=workspace, issue=followed, subscriber=manager)
         notifications_before = Notification.objects.count()
 
-        response = session_client.post(
-            _list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json"
-        )
+        response = session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
 
         assert response.status_code == status.HTTP_201_CREATED
         assert manager.id in _subscriber_ids(open_item.id)
@@ -459,7 +446,9 @@ class TestProjectAdminsAreSubscribersByDefault:
         listed = session_client.get(_list_url(workspace, own_project))
         quiet_issue = _create_issue(client_for(author), workspace, own_project)
         followed_while_removed = create_user.id in _subscriber_ids(quiet_issue)
-        added = session_client.post(_list_url(workspace, own_project), {"subscriber_id": str(create_user.id)}, format="json")
+        added = session_client.post(
+            _list_url(workspace, own_project), {"subscriber_id": str(create_user.id)}, format="json"
+        )
 
         assert removed.status_code == status.HTTP_204_NO_CONTENT
         assert listed.data == []
@@ -491,8 +480,7 @@ class TestProjectAdminsAreSubscribersByDefault:
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestSubscriberTurnedGuestStopsFollowing:
-    """A member turned guest only opens the work items they created (unless "Guest access" is on): they
-    must not keep receiving the notifications of the others."""
+    """A guest only opens their own work items: no notifications of the others'."""
 
     @pytest.fixture(autouse=True)
     def run_tasks_inline(self, monkeypatch):
@@ -542,7 +530,9 @@ class TestSubscriberTurnedGuestStopsFollowing:
         others = _create_issue(client_for(author), workspace, project)
         membership = WorkspaceMember.objects.get(workspace=workspace, member=manager)
 
-        response = session_client.patch(f"/api/workspaces/{workspace.slug}/members/{membership.id}/", {"role": 5}, format="json")
+        response = session_client.patch(
+            f"/api/workspaces/{workspace.slug}/members/{membership.id}/", {"role": 5}, format="json"
+        )
 
         assert response.status_code == status.HTTP_200_OK, response.data
         assert ProjectMember.objects.get(project=project, member=manager).role == 5
@@ -555,4 +545,52 @@ class TestSubscriberTurnedGuestStopsFollowing:
 
         self._demote_in_project(session_client, workspace, project, manager)
 
+        assert manager.id in _subscriber_ids(others)
+
+    def test_removed_then_added_back_as_a_guest(self, session_client, workspace, project, manager, author):
+        # Adding back goes through upstream's ``bulk_update``, which sends no signal: leaving revokes.
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        own = _create_issue(client_for(manager), workspace, project)
+        members_url = f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/"
+        membership = ProjectMember.objects.get(project=project, member=manager)
+
+        assert session_client.delete(f"{members_url}{membership.id}/").status_code == status.HTTP_204_NO_CONTENT
+        response = session_client.post(
+            members_url, {"members": [{"member_id": str(manager.id), "role": 5}]}, format="json"
+        )
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        assert ProjectMember.objects.get(project=project, member=manager).is_active
+        before = self._notified(manager, others)
+        self._changes(workspace, project, author, others)
+
+        assert manager.id not in _subscriber_ids(others)
+        assert manager.id in _subscriber_ids(own)
+        assert self._notified(manager, others) == before
+
+    def test_removed_from_the_workspace(self, session_client, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        own = _create_issue(client_for(manager), workspace, project)
+        membership = WorkspaceMember.objects.get(workspace=workspace, member=manager)
+
+        response = session_client.delete(f"/api/workspaces/{workspace.slug}/members/{membership.id}/")
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
+        assert manager.id not in _subscriber_ids(others)
+        assert manager.id in _subscriber_ids(own)
+
+    def test_guest_access_keeps_the_follows_of_a_member_who_leaves(
+        self, session_client, workspace, project, manager, author
+    ):
+        Project.objects.filter(pk=project.pk).update(guest_view_all_features=True)
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        others = _create_issue(client_for(author), workspace, project)
+        membership = ProjectMember.objects.get(project=project, member=manager)
+
+        response = session_client.delete(
+            f"/api/workspaces/{workspace.slug}/projects/{project.id}/members/{membership.id}/"
+        )
+
+        assert response.status_code == status.HTTP_204_NO_CONTENT
         assert manager.id in _subscriber_ids(others)

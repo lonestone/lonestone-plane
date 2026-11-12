@@ -7,13 +7,12 @@
 import { API_BASE_URL } from "@plane/constants";
 import { APIService } from "@/services/api.service";
 
-/** A project subscriber; `default` is true for a project admin, a subscriber because of their role. */
+/** `default`: a project admin, subscribed because of their role. */
 export type TProjectSubscriber = {
   subscriber_id: string;
   default: boolean;
 };
 
-/** Project subscribers API of the fork (LONESTONEP-8), `/api/extended/.../subscribers/`. */
 export class ProjectSubscriberService extends APIService {
   constructor(baseURL?: string) {
     super(baseURL || API_BASE_URL);

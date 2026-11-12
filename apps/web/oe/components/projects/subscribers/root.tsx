@@ -19,15 +19,7 @@ type Props = {
   projectId: string;
 };
 
-/**
- * "Project subscribers" section of Project Settings → Members (LONESTONEP-8), as in Plane's Enterprise
- * Grid. Project and workspace admins pick the subscribers among the project members; other members
- * see them in the same picker, disabled, as upstream does for the project lead.
- *
- * Uses `MemberDropdownBase` rather than `MemberDropdown`: in multiple mode, the latter also lists the
- * guests of collaborating projects (LONESTONEP-4), who cannot be project subscribers. The row markup
- * repeats `DefaultSettingItem` (core/components/project/project-settings-member-defaults.tsx, not exported).
- */
+// `MemberDropdownBase`, not `MemberDropdown`: the latter also offers guests (LONESTONEP-4).
 export const ProjectSubscribers = observer(function ProjectSubscribers(props: Props) {
   const { workspaceSlug, projectId } = props;
   const { t } = useTranslation();
@@ -41,8 +33,7 @@ export const ProjectSubscribers = observer(function ProjectSubscribers(props: Pr
   const { data: subscribers, mutate } = useSWR(swrKey, () => projectSubscriberService.list(workspaceSlug, projectId));
   const value = (subscribers ?? []).map((subscriber) => subscriber.subscriber_id);
 
-  // Project members without the guests, plus the current subscribers: one who became a guest stays
-  // listed, so that an admin can still remove them.
+  // Keep current subscribers listed so that an admin can still remove one who became a guest.
   const pickableIds = Array.from(new Set([...(getProjectMemberIds(projectId, false) ?? []), ...value]));
 
   const canManage =
@@ -53,7 +44,6 @@ export const ProjectSubscribers = observer(function ProjectSubscribers(props: Pr
     const added = ids.filter((id) => !value.includes(id));
     const removed = value.filter((id) => !ids.includes(id));
     const previous = subscribers;
-    // Optimistic: show the new list at once, revert on error.
     void mutate(
       ids.map(
         (id) =>

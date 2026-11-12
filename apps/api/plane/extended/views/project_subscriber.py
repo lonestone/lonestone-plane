@@ -30,17 +30,12 @@ def _project(slug, project_id):
 
 
 class ProjectSubscriberEndpoint(BaseAPIView):
-    """GET the project subscribers (project admins and members); POST one (project or workspace admins).
-
-    Active project admins are subscribers by default; DELETE on one of them records that they removed
-    themselves, POST subscribes them again.
-    """
+    """GET the project subscribers; POST one (project or workspace admins)."""
 
     @allow_permission([ROLE.ADMIN, ROLE.MEMBER])
     def get(self, request, slug, project_id):
         if _project(slug, project_id) is None:
             return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
-        # Active project admins are listed by default (``default: true``), without a row of their own.
         return Response(subscriber_entries(project_id), status=status.HTTP_200_OK)
 
     @allow_permission([ROLE.ADMIN])
@@ -67,7 +62,7 @@ class ProjectSubscriberEndpoint(BaseAPIView):
 
 
 class ProjectSubscriberDetailEndpoint(BaseAPIView):
-    """DELETE a project subscriber (project or workspace admins). The work items they follow stay followed."""
+    """DELETE a project subscriber (project or workspace admins)."""
 
     @allow_permission([ROLE.ADMIN])
     def delete(self, request, slug, project_id, subscriber_id):
