@@ -101,11 +101,18 @@ def subscribe_new_issue(issue: Issue) -> None:
 def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscriber, bool]:
     """Make an eligible project member a project subscriber; returns the row and whether it is new.
 
-    Raises ``SubscriberNotEligible`` for anyone but an active member with the Member or Admin role.
+    Raises ``SubscriberNotEligible`` for anyone but an active member with the Member or Admin role. Adding
+    someone who is already a subscriber subscribes them again to the current work items.
     """
     if not is_eligible_member(project.id, user_id):
         raise SubscriberNotEligible(NOT_ELIGIBLE)
-    return ProjectSubscriber.objects.get_or_create(project=project, subscriber_id=user_id)
+    subscriber, created = ProjectSubscriber.objects.get_or_create(project=project, subscriber_id=user_id)
+    # As in Plane, a new project subscriber also follows the project's current work items.
+    # ``issue_objects`` leaves out archived and deleted work items, drafts and intake items in triage.
+    subscribe_to_issues(
+        project.id, [user_id], Issue.issue_objects.filter(project_id=project.id).values_list("id", flat=True)
+    )
+    return subscriber, created
 
 
 def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:

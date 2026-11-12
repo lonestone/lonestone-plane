@@ -6,6 +6,8 @@
 
 from uuid import uuid4
 
+from django.utils import timezone
+
 import pytest
 from rest_framework import status
 from rest_framework.test import APIClient
@@ -14,6 +16,7 @@ from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.notification_task import notifications
 from plane.db.models import (
     EmailNotificationLog,
+    Issue,
     IssueSubscriber,
     Notification,
     ProjectMember,
@@ -301,3 +304,41 @@ class TestProjectSubscribersApi:
         response = session_client.delete(f"/api/workspaces/{workspace.slug}/members/{membership.id}/")
         assert response.status_code == status.HTTP_204_NO_CONTENT
         assert _listed(workspace, project) == set()
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+class TestNewSubscriberFollowsExistingWorkItems:
+    def _issue(self, workspace, project, author, name, **fields):
+        issue = Issue(name=name, project=project, workspace=workspace, **fields)
+        issue.save(created_by_id=author.id)
+        return issue
+
+    def test_follows_every_current_work_item_once(self, session_client, workspace, project, manager, author):
+        open_item = self._issue(workspace, project, author, "Open")
+        followed = self._issue(workspace, project, author, "Already followed")
+        archived = self._issue(workspace, project, author, "Archived")
+        Issue.objects.filter(pk=archived.pk).update(archived_at=timezone.now())
+        deleted = self._issue(workspace, project, author, "Deleted")
+        deleted.delete()
+        IssueSubscriber.objects.create(project=project, workspace=workspace, issue=followed, subscriber=manager)
+        notifications_before = Notification.objects.count()
+
+        response = session_client.post(
+            _list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json"
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert manager.id in _subscriber_ids(open_item.id)
+        assert IssueSubscriber.objects.filter(issue=followed, subscriber=manager).count() == 1
+        assert manager.id not in _subscriber_ids(archived.id)
+        assert not IssueSubscriber.all_objects.filter(issue=deleted, subscriber=manager).exists()
+        assert Notification.objects.count() == notifications_before
+
+    def test_work_items_of_other_projects_are_left_alone(
+        self, session_client, workspace, project, create_user, manager, author
+    ):
+        other = _make_project(workspace, create_user, "OTHR")
+        elsewhere = self._issue(workspace, other, create_user, "Elsewhere")
+        session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
+        assert manager.id not in _subscriber_ids(elsewhere.id)
