@@ -33,6 +33,7 @@ from plane.db.models import (
 from plane.extended.models import ProjectSubscriber
 from plane.license.utils.instance_value import get_email_configuration
 from plane.utils.email import generate_plain_text_from_html
+from plane.utils.exception_logger import log_exception
 
 NOT_ELIGIBLE = "subscriber_not_eligible"
 
@@ -261,4 +262,7 @@ def send_new_issue_emails(issue: Issue, receiver_ids: list[UUID]) -> None:
             connection=connection,
         )
         message.attach_alternative(html, "text/html")
-        message.send()
+        try:
+            message.send()
+        except Exception as exception:  # noqa: BLE001  one failed address must not stop the others
+            log_exception(exception)

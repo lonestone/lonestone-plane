@@ -6,9 +6,9 @@
 
 import type { Page } from "@playwright/test";
 import type { ProjectFixture } from "./fixtures";
-import { createWorkItems, expect, fetchWorkItem, stateId, test } from "./fixtures";
+import { addMemberWithContext, createWorkItems, expect, fetchWorkItem, stateId, test } from "./fixtures";
 import type { TWorkItem } from "./helpers/plane";
-import { addProjectMember, getCurrentUser, updateWorkItem } from "./helpers/plane";
+import { getCurrentUser, updateWorkItem } from "./helpers/plane";
 import { applyOption, barButton, bulkBar, toggleWorkItem } from "./helpers/ui";
 import { projectIssuesUrl } from "./helpers/urls";
 
@@ -93,13 +93,7 @@ test.describe("bulk edit (list layout)", () => {
 
   test("assignees: shows who is on all or some work items, then reassigns", async ({ page, browser, project }) => {
     const owner = await getCurrentUser(project.session);
-    const memberContext = await browser.newContext();
-    const member = await addProjectMember(
-      project.session,
-      memberContext.request,
-      project.workspaceSlug,
-      project.projectId
-    );
+    const { member, context: memberContext } = await addMemberWithContext(browser, project);
     await memberContext.close();
     const items = await createWorkItems(project, ["Alpha", "Bravo"]);
     await updateWorkItem(project.session, project.workspaceSlug, project.projectId, items[0].id, {

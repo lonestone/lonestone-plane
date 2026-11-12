@@ -5,10 +5,9 @@
  */
 
 import type { Browser, BrowserContext } from "@playwright/test";
-import { createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
+import { addMemberWithContext, createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
 import type { ProjectFixture } from "./fixtures";
 import {
-  addProjectMember,
   getProject,
   ROLE,
   setProjectLayout,
@@ -29,14 +28,7 @@ async function addGuest(
   project: ProjectFixture,
   settings: { collaboration: boolean; guestAccess: boolean }
 ): Promise<{ guest: { id: string; email: string; displayName: string }; guestContext: BrowserContext }> {
-  const guestContext = await browser.newContext();
-  const guest = await addProjectMember(
-    project.session,
-    guestContext.request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.guest
-  );
+  const { member: guest, context: guestContext } = await addMemberWithContext(browser, project, ROLE.guest);
   await setGuestCollaboration(project.session, project.workspaceSlug, project.projectId, settings.collaboration);
   await setGuestAccess(project.session, project.workspaceSlug, project.projectId, settings.guestAccess);
   return { guest, guestContext };
@@ -44,13 +36,7 @@ async function addGuest(
 
 test("a guest is offered in the assignees and can be assigned", async ({ page, browser, project }) => {
   const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: true });
-  const member = await addProjectMember(
-    project.session,
-    (await browser.newContext()).request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.member
-  );
+  const { member, context: memberContext } = await addMemberWithContext(browser, project);
   const [workItem] = await createWorkItems(project, ["Review the quote"]);
 
   await page.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
@@ -80,6 +66,7 @@ test("a guest is offered in the assignees and can be assigned", async ({ page, b
     )
     .toEqual(expect.arrayContaining([expect.stringMatching(/ Review the quote$/)]));
   await guestContext.close();
+  await memberContext.close();
 });
 
 // Plane keeps "Your work" to workspace admins and members: a guest finds their work items in the project.
@@ -176,14 +163,7 @@ test.describe("Guest access off: a guest is shown but cannot be assigned yet", (
 
   test("a member who is not admin is asked to contact an admin, and nothing changes", async ({ browser, project }) => {
     const { guest, guestContext } = await addGuest(browser, project, { collaboration: true, guestAccess: false });
-    const memberContext = await browser.newContext();
-    await addProjectMember(
-      project.session,
-      memberContext.request,
-      project.workspaceSlug,
-      project.projectId,
-      ROLE.member
-    );
+    const { context: memberContext } = await addMemberWithContext(browser, project);
     const [workItem] = await createWorkItems(project, ["Book the room"]);
 
     const memberPage = await memberContext.newPage();

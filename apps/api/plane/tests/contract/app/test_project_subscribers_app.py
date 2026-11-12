@@ -11,7 +11,6 @@ from django.utils import timezone
 
 import pytest
 from rest_framework import status
-from rest_framework.test import APIClient
 
 from plane.bgtasks.issue_activities_task import issue_activity
 from plane.bgtasks.notification_task import notifications
@@ -21,44 +20,15 @@ from plane.db.models import (
     IssueSubscriber,
     Notification,
     ProjectMember,
-    State,
     UserNotificationPreference,
     WorkspaceMember,
 )
 from plane.extended.models import ProjectSubscriber
 from plane.extended.tasks import notify_project_subscribers_of_new_issue
-from plane.tests.factories import ProjectFactory, ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
+from plane.tests.factories import ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
+from plane.tests.fork_builders import client_for, make_issue, make_project, make_user
 
 ISSUES_URL = "/api/workspaces/{slug}/projects/{project_id}/issues/"
-
-
-def _make_project(workspace, owner, identifier):
-    project = ProjectFactory(name=identifier, identifier=identifier, workspace=workspace, created_by=owner)
-    ProjectMemberFactory(project=project, member=owner, workspace=workspace, role=20)
-    State.objects.create(
-        name="Backlog",
-        color="#000000",
-        project=project,
-        workspace=workspace,
-        sequence=1,
-        group="backlog",
-        default=True,
-        created_by=owner,
-    )
-    return project
-
-
-def _make_user(workspace, project, role, is_active=True):
-    user = UserFactory(username=uuid4().hex)  # the factory leaves the unique username empty
-    WorkspaceMemberFactory(workspace=workspace, member=user, role=role)
-    ProjectMemberFactory(project=project, member=user, workspace=workspace, role=role, is_active=is_active)
-    return user
-
-
-def _client(user):
-    client = APIClient()
-    client.force_authenticate(user=user)
-    return client
 
 
 def _create_issue(client, workspace, project, name="New ticket"):
@@ -73,17 +43,17 @@ def _subscriber_ids(issue_id):
 
 @pytest.fixture
 def project(db, workspace, create_user):
-    return _make_project(workspace, create_user, "SUBS")
+    return make_project(workspace, create_user, "SUBS")
 
 
 @pytest.fixture
 def manager(db, workspace, project):
-    return _make_user(workspace, project, 15)
+    return make_user(workspace, project, 15)
 
 
 @pytest.fixture
 def author(db, workspace, project):
-    return _make_user(workspace, project, 15)
+    return make_user(workspace, project, 15)
 
 
 @pytest.mark.contract
@@ -91,30 +61,30 @@ def author(db, workspace, project):
 class TestNewWorkItemSubscribesProjectSubscribers:
     def test_project_subscriber_follows_a_new_work_item(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = _create_issue(_client(author), workspace, project)
+        issue_id = _create_issue(client_for(author), workspace, project)
         assert manager.id in _subscriber_ids(issue_id)
 
     @pytest.mark.parametrize(("role", "is_active"), [(5, True), (15, False)])
     def test_guest_or_former_member_does_not_follow(self, workspace, project, author, role, is_active):
-        subscriber = _make_user(workspace, project, role, is_active=is_active)
+        subscriber = make_user(workspace, project, role, is_active=is_active)
         ProjectSubscriber.objects.create(project=project, subscriber=subscriber)
-        issue_id = _create_issue(_client(author), workspace, project)
+        issue_id = _create_issue(client_for(author), workspace, project)
         assert subscriber.id not in _subscriber_ids(issue_id)
 
     def test_nothing_changes_without_project_subscribers(self, workspace, project, author):
-        issue_id = _create_issue(_client(author), workspace, project)
+        issue_id = _create_issue(client_for(author), workspace, project)
         assert IssueSubscriber.objects.filter(issue_id=issue_id).count() == 0
 
     def test_author_who_is_a_project_subscriber_follows_once(self, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = _create_issue(_client(manager), workspace, project)
+        issue_id = _create_issue(client_for(manager), workspace, project)
         assert IssueSubscriber.objects.filter(issue_id=issue_id, subscriber=manager).count() == 1
 
     def test_subscribers_of_another_project_do_not_follow(self, workspace, project, create_user, author):
-        other = _make_project(workspace, create_user, "OTHR")
-        outsider = _make_user(workspace, other, 15)
+        other = make_project(workspace, create_user, "OTHR")
+        outsider = make_user(workspace, other, 15)
         ProjectSubscriber.objects.create(project=other, subscriber=outsider)
-        issue_id = _create_issue(_client(author), workspace, project)
+        issue_id = _create_issue(client_for(author), workspace, project)
         assert outsider.id not in _subscriber_ids(issue_id)
 
 
@@ -153,7 +123,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         self, django_capture_on_commit_callbacks, workspace, project, manager, author
     ):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = self._create(django_capture_on_commit_callbacks, _client(author), workspace, project)
+        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
 
         notification = Notification.objects.get(receiver=manager, entity_identifier=issue_id)
         assert notification.triggered_by_id == author.id
@@ -171,7 +141,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
     ):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         UserNotificationPreference.objects.filter(user=manager).update(property_change=False)
-        issue_id = self._create(django_capture_on_commit_callbacks, _client(author), workspace, project)
+        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
 
         assert Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
         assert not [message for message in mail.outbox if message.to == [manager.email]]
@@ -180,7 +150,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         self, django_capture_on_commit_callbacks, workspace, project, manager
     ):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = self._create(django_capture_on_commit_callbacks, _client(manager), workspace, project)
+        issue_id = self._create(django_capture_on_commit_callbacks, client_for(manager), workspace, project)
         assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
 
     def test_assigned_subscriber_only_gets_the_assignment(
@@ -188,7 +158,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
     ):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
         issue_id = self._create(
-            django_capture_on_commit_callbacks, _client(author), workspace, project, assignee_ids=[str(manager.id)]
+            django_capture_on_commit_callbacks, client_for(author), workspace, project, assignee_ids=[str(manager.id)]
         )
         fields = [
             notification.data["issue_activity"]["field"]
@@ -200,7 +170,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
     def test_nobody_is_told_without_project_subscribers(
         self, django_capture_on_commit_callbacks, workspace, project, manager, author
     ):
-        issue_id = self._create(django_capture_on_commit_callbacks, _client(author), workspace, project)
+        issue_id = self._create(django_capture_on_commit_callbacks, client_for(author), workspace, project)
         assert not Notification.objects.filter(entity_identifier=issue_id).exists()
 
 
@@ -225,13 +195,13 @@ def _listed(workspace, project):
 class TestProjectSubscribersApi:
     def test_admin_and_member_list_guest_does_not(self, session_client, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        guest = _make_user(workspace, project, 5)
+        guest = make_user(workspace, project, 5)
 
         response = session_client.get(_list_url(workspace, project))
         assert response.status_code == status.HTTP_200_OK
         assert [str(row["subscriber_id"]) for row in response.data] == [str(manager.id)]
-        assert _client(manager).get(_list_url(workspace, project)).status_code == status.HTTP_200_OK
-        assert _client(guest).get(_list_url(workspace, project)).status_code == status.HTTP_403_FORBIDDEN
+        assert client_for(manager).get(_list_url(workspace, project)).status_code == status.HTTP_200_OK
+        assert client_for(guest).get(_list_url(workspace, project)).status_code == status.HTTP_403_FORBIDDEN
 
     def test_admin_adds_a_subscriber_once(self, session_client, workspace, project, manager):
         first = session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
@@ -244,14 +214,14 @@ class TestProjectSubscribersApi:
 
     @pytest.mark.parametrize(("role", "is_active"), [(5, True), (15, False)])
     def test_guest_or_former_member_cannot_be_added(self, session_client, workspace, project, role, is_active):
-        user = _make_user(workspace, project, role, is_active=is_active)
+        user = make_user(workspace, project, role, is_active=is_active)
         response = session_client.post(_list_url(workspace, project), {"subscriber_id": str(user.id)}, format="json")
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert response.data == {"error": "subscriber_not_eligible"}
 
     def test_outsider_cannot_be_added(self, session_client, workspace, project, create_user):
-        other = _make_project(workspace, create_user, "OTHR")
-        outsider = _make_user(workspace, other, 15)
+        other = make_project(workspace, create_user, "OTHR")
+        outsider = make_user(workspace, other, 15)
         response = session_client.post(
             _list_url(workspace, project), {"subscriber_id": str(outsider.id)}, format="json"
         )
@@ -264,7 +234,7 @@ class TestProjectSubscribersApi:
 
     def test_member_cannot_change_the_subscribers(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=author)
-        client = _client(manager)
+        client = client_for(manager)
         add = client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
         remove = client.delete(_detail_url(workspace, project, author.id))
 
@@ -277,14 +247,14 @@ class TestProjectSubscribersApi:
         WorkspaceMemberFactory(workspace=workspace, member=workspace_admin, role=20)
         ProjectMemberFactory(project=project, member=workspace_admin, workspace=workspace, role=15)
 
-        response = _client(workspace_admin).post(
+        response = client_for(workspace_admin).post(
             _list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json"
         )
         assert response.status_code == status.HTTP_201_CREATED
 
     def test_remove_keeps_the_work_items_followed(self, session_client, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
-        issue_id = _create_issue(_client(author), workspace, project)
+        issue_id = _create_issue(client_for(author), workspace, project)
 
         first = session_client.delete(_detail_url(workspace, project, manager.id))
         again = session_client.delete(_detail_url(workspace, project, manager.id))
@@ -293,7 +263,7 @@ class TestProjectSubscribersApi:
         assert again.status_code == status.HTTP_204_NO_CONTENT
         assert _listed(workspace, project) == set()
         assert manager.id in _subscriber_ids(issue_id)
-        assert manager.id not in _subscriber_ids(_create_issue(_client(author), workspace, project))
+        assert manager.id not in _subscriber_ids(_create_issue(client_for(author), workspace, project))
 
     def test_project_of_another_workspace(self, session_client, workspace, project, manager):
         response = session_client.get(
@@ -323,17 +293,12 @@ class TestProjectSubscribersApi:
 @pytest.mark.contract
 @pytest.mark.django_db
 class TestNewSubscriberFollowsExistingWorkItems:
-    def _issue(self, workspace, project, author, name, **fields):
-        issue = Issue(name=name, project=project, workspace=workspace, **fields)
-        issue.save(created_by_id=author.id)
-        return issue
-
     def test_follows_every_current_work_item_once(self, session_client, workspace, project, manager, author):
-        open_item = self._issue(workspace, project, author, "Open")
-        followed = self._issue(workspace, project, author, "Already followed")
-        archived = self._issue(workspace, project, author, "Archived")
+        open_item = make_issue(project, author=author, name="Open")
+        followed = make_issue(project, author=author, name="Already followed")
+        archived = make_issue(project, author=author, name="Archived")
         Issue.objects.filter(pk=archived.pk).update(archived_at=timezone.now())
-        deleted = self._issue(workspace, project, author, "Deleted")
+        deleted = make_issue(project, author=author, name="Deleted")
         deleted.delete()
         IssueSubscriber.objects.create(project=project, workspace=workspace, issue=followed, subscriber=manager)
         notifications_before = Notification.objects.count()
@@ -352,7 +317,7 @@ class TestNewSubscriberFollowsExistingWorkItems:
     def test_work_items_of_other_projects_are_left_alone(
         self, session_client, workspace, project, create_user, manager, author
     ):
-        other = _make_project(workspace, create_user, "OTHR")
-        elsewhere = self._issue(workspace, other, create_user, "Elsewhere")
+        other = make_project(workspace, create_user, "OTHR")
+        elsewhere = make_issue(other, author=create_user, name="Elsewhere")
         session_client.post(_list_url(workspace, project), {"subscriber_id": str(manager.id)}, format="json")
         assert manager.id not in _subscriber_ids(elsewhere.id)

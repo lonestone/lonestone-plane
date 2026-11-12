@@ -17,6 +17,7 @@ from plane.extended.services.issue_bulk_update import (
     Change,
     bulk_update_issues,
 )
+from plane.tests.fork_builders import make_issue
 
 SERVICE = "plane.extended.services.issue_bulk_update"
 
@@ -39,12 +40,6 @@ def _make_project(workspace, owner, name, identifier):
     ProjectMember.objects.create(project=project, member=owner, workspace=workspace, role=20)
     _make_state(project, "Backlog", group="backlog", sequence=1, default=True)
     return project
-
-
-def _make_issue(project, name, **fields):
-    issue = Issue(name=name, project=project, workspace=project.workspace, **fields)
-    issue.save(created_by_id=project.created_by_id)
-    return issue
 
 
 @pytest.fixture
@@ -106,11 +101,11 @@ class TestBulkUpdateService:
     ):
         monkeypatch.setitem(issue_bulk_update.PROPERTY_HANDLERS, "state_id", _NameHandler())
         inactive = {
-            "foreign": lambda: _make_issue(other_project, "Inactive"),
-            "archived": lambda: _make_issue(project, "Inactive", archived_at=timezone.now()),
-            "draft": lambda: _make_issue(project, "Inactive", is_draft=True),
+            "foreign": lambda: make_issue(other_project, "Inactive"),
+            "archived": lambda: make_issue(project, "Inactive", archived_at=timezone.now()),
+            "draft": lambda: make_issue(project, "Inactive", is_draft=True),
         }[kind]()
-        active = _make_issue(project, "Active")
+        active = make_issue(project, "Active")
 
         with pytest.raises(BulkUpdateValidationError) as error:
             _run(workspace, project, [str(inactive.id), str(active.id)], {"state_id": "Renamed"}, create_user)
@@ -124,7 +119,7 @@ class TestBulkUpdateService:
         self, workspace, project, create_user, monkeypatch, tasks, django_capture_on_commit_callbacks
     ):
         monkeypatch.setitem(issue_bulk_update.PROPERTY_HANDLERS, "state_id", _NameHandler())
-        issue = _make_issue(project, "Original")
+        issue = make_issue(project, "Original")
 
         with django_capture_on_commit_callbacks(execute=True):
             result = _run(workspace, project, [str(issue.id), str(issue.id)], {"state_id": "Renamed"}, create_user)
@@ -141,7 +136,7 @@ class TestBulkUpdateService:
         self, workspace, project, create_user, monkeypatch, tasks, django_capture_on_commit_callbacks
     ):
         monkeypatch.setitem(issue_bulk_update.PROPERTY_HANDLERS, "state_id", _ExplodingHandler())
-        issue = _make_issue(project, "Original")
+        issue = make_issue(project, "Original")
 
         with django_capture_on_commit_callbacks(execute=True) as callbacks:
             with pytest.raises(RuntimeError):
@@ -160,14 +155,14 @@ class TestBulkUpdateService:
 class TestStateHandler:
     def test_state_of_other_project_is_rejected(self, workspace, project, other_project, create_user):
         foreign_state = _make_state(other_project, "Foreign")
-        issue = _make_issue(project, "Work item")
+        issue = make_issue(project, "Work item")
         with pytest.raises(BulkUpdateValidationError) as error:
             _run(workspace, project, [str(issue.id)], {"state_id": str(foreign_state.id)}, create_user)
         assert error.value.code == "state_not_in_project"
 
     def test_updates_state_audit_fields_and_completed_at(self, workspace, project, create_user, tasks):
         done = _make_state(project, "Done", group="completed", sequence=3)
-        issue = _make_issue(project, "Work item")
+        issue = make_issue(project, "Work item")
         before = Issue.objects.get(pk=issue.pk).updated_at
 
         result = _run(workspace, project, [str(issue.id)], {"state_id": str(done.id)}, create_user)
@@ -194,7 +189,7 @@ class TestAssigneesHandler:
     def test_existing_links_are_kept_and_only_missing_ones_created(self, workspace, project, create_user, tasks):
         alice = _make_member(workspace, project, "alice")
         bob = _make_member(workspace, project, "bob")
-        issue = _make_issue(project, "Work item")
+        issue = make_issue(project, "Work item")
         existing = IssueAssignee.objects.create(
             issue=issue, assignee=bob, project=project, workspace=workspace, created_by=create_user
         )
@@ -214,19 +209,19 @@ class TestAssigneesHandler:
 @pytest.mark.django_db
 class TestDateMerge:
     def test_start_after_stored_target_fails(self, workspace, project, create_user, tasks):
-        issue = _make_issue(project, "Work item", target_date=date(2026, 10, 10))
+        issue = make_issue(project, "Work item", target_date=date(2026, 10, 10))
         with pytest.raises(BulkUpdateValidationError) as error:
             _run(workspace, project, [str(issue.id)], {"start_date": "2026-10-20"}, create_user)
         assert error.value.code == "invalid_date_range"
 
     def test_target_before_stored_start_fails(self, workspace, project, create_user, tasks):
-        issue = _make_issue(project, "Work item", start_date=date(2026, 10, 20))
+        issue = make_issue(project, "Work item", start_date=date(2026, 10, 20))
         with pytest.raises(BulkUpdateValidationError) as error:
             _run(workspace, project, [str(issue.id)], {"target_date": "2026-10-10"}, create_user)
         assert error.value.code == "invalid_date_range"
 
     def test_clearing_a_date_is_always_valid(self, workspace, project, create_user, tasks):
-        issue = _make_issue(project, "Work item", start_date=date(2026, 10, 20), target_date=date(2026, 10, 25))
+        issue = make_issue(project, "Work item", start_date=date(2026, 10, 20), target_date=date(2026, 10, 25))
         result = _run(workspace, project, [str(issue.id)], {"target_date": None}, create_user)
         assert result["updated_issue_ids"] == [str(issue.id)]
         issue.refresh_from_db()
@@ -234,7 +229,7 @@ class TestDateMerge:
         assert issue.start_date == date(2026, 10, 20)
 
     def test_both_dates_in_one_request_are_merged_together(self, workspace, project, create_user, tasks):
-        issue = _make_issue(project, "Work item", start_date=date(2026, 10, 1), target_date=date(2026, 10, 5))
+        issue = make_issue(project, "Work item", start_date=date(2026, 10, 1), target_date=date(2026, 10, 5))
         result = _run(
             workspace,
             project,
@@ -255,7 +250,7 @@ class TestRemoveLinksHandler:
         from plane.db.models import IssueLabel, Label
 
         label = Label.objects.create(name="front", project=project, workspace=workspace)
-        issues = [_make_issue(project, f"Work item {index}") for index in range(3)]
+        issues = [make_issue(project, f"Work item {index}") for index in range(3)]
         for issue in issues:
             IssueLabel.objects.create(issue=issue, label=label, project=project, workspace=workspace)
 

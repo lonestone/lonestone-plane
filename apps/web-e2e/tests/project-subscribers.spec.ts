@@ -4,19 +4,11 @@
  * See the LICENSE file for details.
  */
 
-import type { Browser, Page } from "@playwright/test";
-import { createWorkItems, expect, test } from "./fixtures";
-import type { ProjectFixture } from "./fixtures";
-import {
-  addProjectMember,
-  addProjectSubscriber,
-  isSubscribed,
-  listNotifications,
-  ROLE,
-  setEmailPreferences,
-} from "./helpers/plane";
+import type { Page } from "@playwright/test";
+import { addMemberWithContext, createWorkItems, expect, test } from "./fixtures";
+import { addProjectSubscriber, isSubscribed, listNotifications, setEmailPreferences } from "./helpers/plane";
 import { emailsTo, sendQueuedNotificationEmails } from "./helpers/mail";
-import { WEB_URL, workItemUrl } from "./helpers/urls";
+import { projectMembersSettingsUrl, WEB_URL, workItemUrl } from "./helpers/urls";
 
 // LONESTONEP-8: project admins choose project subscribers in Project Settings → Members; a project
 // subscriber follows every new work item of the project and is told of it (Inbox and email).
@@ -26,27 +18,10 @@ function picker(page: Page, name: string | RegExp) {
   return page.getByRole("button", { name }).first();
 }
 
-function membersSettingsUrl(project: ProjectFixture): string {
-  return `${WEB_URL}/${project.workspaceSlug}/settings/projects/${project.projectId}/members/`;
-}
-
-/** A project member logged in in their own browser context. */
-async function addMember(browser: Browser, project: ProjectFixture) {
-  const context = await browser.newContext();
-  const member = await addProjectMember(
-    project.session,
-    context.request,
-    project.workspaceSlug,
-    project.projectId,
-    ROLE.member
-  );
-  return { member, context };
-}
-
 test("an admin adds and removes a project subscriber", async ({ page, browser, project }) => {
-  const { member, context } = await addMember(browser, project);
+  const { member, context } = await addMemberWithContext(browser, project);
 
-  await page.goto(membersSettingsUrl(project));
+  await page.goto(projectMembersSettingsUrl(project.workspaceSlug, project.projectId));
   await picker(page, "Add subscribers").click();
   // option names start with the avatar's initial
   await page.getByRole("option", { name: new RegExp(` ${member.displayName}$`) }).click();
@@ -66,11 +41,11 @@ test("an admin adds and removes a project subscriber", async ({ page, browser, p
 });
 
 test("a member sees the project subscribers without changing them", async ({ browser, project }) => {
-  const { member, context } = await addMember(browser, project);
+  const { member, context } = await addMemberWithContext(browser, project);
   await addProjectSubscriber(project.session, project.workspaceSlug, project.projectId, member.id);
 
   const memberPage = await context.newPage();
-  await memberPage.goto(membersSettingsUrl(project));
+  await memberPage.goto(projectMembersSettingsUrl(project.workspaceSlug, project.projectId));
   const subscribers = picker(memberPage, new RegExp(` ${member.displayName}$`));
   await expect(subscribers).toBeVisible();
   await expect(subscribers).toBeDisabled();
@@ -81,7 +56,7 @@ test("a project subscriber follows a new work item and is told of it in the Inbo
   browser,
   project,
 }) => {
-  const { member, context } = await addMember(browser, project);
+  const { member, context } = await addMemberWithContext(browser, project);
   await addProjectSubscriber(project.session, project.workspaceSlug, project.projectId, member.id);
   const [workItem] = await createWorkItems(project, ["Homepage mock-up"]);
 
@@ -117,7 +92,7 @@ test("a project subscriber who turned off property change emails is only told in
   browser,
   project,
 }) => {
-  const { member, context } = await addMember(browser, project);
+  const { member, context } = await addMemberWithContext(browser, project);
   await addProjectSubscriber(project.session, project.workspaceSlug, project.projectId, member.id);
   await setEmailPreferences(member.session, { property_change: false });
   await createWorkItems(project, ["Footer links"]);
