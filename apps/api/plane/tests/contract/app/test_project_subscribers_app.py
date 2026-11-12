@@ -6,6 +6,7 @@
 
 from uuid import uuid4
 
+from django.core import mail
 from django.utils import timezone
 
 import pytest
@@ -123,6 +124,14 @@ class TestNewWorkItemNotifiesProjectSubscribers:
     """Runs upstream's activity and notification tasks and the fork's task in the request, without a worker."""
 
     @pytest.fixture(autouse=True)
+    def email_configured(self, monkeypatch):
+        """The test settings send emails to ``mail.outbox``; the instance only needs an SMTP host."""
+        monkeypatch.setattr(
+            "plane.extended.services.project_subscribers.get_email_configuration",
+            lambda: ("smtp.test", "", "", "25", "0", "0", "Plane <plane@test.local>"),
+        )
+
+    @pytest.fixture(autouse=True)
     def run_tasks_inline(self, monkeypatch):
         monkeypatch.setattr(issue_activity, "delay", issue_activity.run)
         monkeypatch.setattr(notifications, "delay", notifications.run)
@@ -150,7 +159,12 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert notification.triggered_by_id == author.id
         assert notification.data["issue_activity"]["verb"] == "created"
         assert notification.data["issue_activity"]["field"] == "project_subscription"
-        assert EmailNotificationLog.objects.filter(receiver=manager, entity_identifier=issue_id).count() == 1
+        sent = [message for message in mail.outbox if message.to == [manager.email]]
+        assert len(sent) == 1
+        assert sent[0].subject == f"{author.display_name} created SUBS-1 New ticket"
+        html = sent[0].alternatives[0][0]
+        assert "New ticket" in html and "/test-workspace/browse/SUBS-1/" in html
+        assert not EmailNotificationLog.objects.filter(entity_identifier=issue_id).exists()
 
     def test_email_follows_the_property_changes_preference(
         self, django_capture_on_commit_callbacks, workspace, project, manager, author
@@ -160,7 +174,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         issue_id = self._create(django_capture_on_commit_callbacks, _client(author), workspace, project)
 
         assert Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
-        assert not EmailNotificationLog.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
+        assert not [message for message in mail.outbox if message.to == [manager.email]]
 
     def test_author_is_not_told_of_their_own_work_item(
         self, django_capture_on_commit_callbacks, workspace, project, manager

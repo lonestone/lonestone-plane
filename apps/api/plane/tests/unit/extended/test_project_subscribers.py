@@ -144,19 +144,45 @@ class TestNewIssueSignal:
 @pytest.mark.unit
 @pytest.mark.django_db
 class TestNewWorkItemEmail:
-    def test_upstream_email_payload_keeps_the_creation(self, workspace, project, create_user):
-        from plane.bgtasks.email_notification_task import create_payload
-        from plane.db.models import EmailNotificationLog
+    @pytest.fixture(autouse=True)
+    def email_configured(self, monkeypatch):
+        monkeypatch.setattr(
+            "plane.extended.services.project_subscribers.get_email_configuration",
+            lambda: ("smtp.test", "", "", "25", "0", "0", "Plane <plane@test.local>"),
+        )
+
+    def test_email_says_who_created_what_and_links_it(self, workspace, project, create_user):
+        from django.core import mail
+
         from plane.extended.services.project_subscribers import notify_new_issue
 
+        manager = _make_user(workspace, project, 15)
+        _subscribe_project(project, manager)
+        issue = _make_issue(project, "Homepage mock-up")
+        Issue.objects.filter(pk=issue.pk).update(created_by=create_user, priority="high")
+        notify_new_issue(issue.id)
+
+        (message,) = mail.outbox
+        assert message.to == [manager.email]
+        assert message.subject == f"{create_user.display_name} created SUB-1 Homepage mock-up"
+        assert "created a new work item in" in message.body
+        assert "high" in message.body
+        assert f"/{workspace.slug}/browse/SUB-1/" in message.alternatives[0][0]
+
+    def test_no_email_without_smtp_settings(self, monkeypatch, workspace, project, create_user):
+        from django.core import mail
+
+        from plane.extended.services.project_subscribers import notify_new_issue
+
+        monkeypatch.setattr(
+            "plane.extended.services.project_subscribers.get_email_configuration",
+            lambda: ("", "", "", "587", "1", "0", ""),
+        )
         manager = _make_user(workspace, project, 15)
         _subscribe_project(project, manager)
         issue = _make_issue(project, "Homepage mock-up")
         Issue.objects.filter(pk=issue.pk).update(created_by=create_user)
         notify_new_issue(issue.id)
 
-        log = EmailNotificationLog.objects.get(receiver=manager, entity_identifier=issue.id)
-        payload = create_payload({str(create_user.id): [log.data]})
-        changes = payload[str(create_user.id)]
-        assert changes["project_subscription"]["new_value"] == ["Homepage mock-up"]
-        assert "activity_time" in changes
+        assert mail.outbox == []
+        assert Notification.objects.filter(receiver=manager).count() == 1

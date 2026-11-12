@@ -14,20 +14,25 @@ from __future__ import annotations
 from collections.abc import Iterable
 from uuid import UUID
 
+from django.conf import settings
+from django.core.mail import EmailMultiAlternatives, get_connection
 from django.db.models import Exists, OuterRef
+from django.template.loader import render_to_string
 
 from plane.app.permissions.base import ROLE
 from plane.db.models import (
-    EmailNotificationLog,
     Issue,
     IssueAssignee,
     IssueSubscriber,
     Notification,
     Project,
     ProjectMember,
+    User,
     UserNotificationPreference,
 )
 from plane.extended.models import ProjectSubscriber
+from plane.license.utils.instance_value import get_email_configuration
+from plane.utils.email import generate_plain_text_from_html
 
 NOT_ELIGIBLE = "subscriber_not_eligible"
 
@@ -124,11 +129,7 @@ def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:
 
 
 def _activity(issue: Issue) -> dict:
-    """The ``issue_activity`` part of upstream's notification data, for "created the work item".
-
-    ``new_value`` holds the work item name: upstream's email payload (``create_payload``) only keeps an
-    activity whose old or new value is set.
-    """
+    """The ``issue_activity`` part of upstream's notification data, for "created the work item"."""
     return {
         "id": "",
         "verb": "created",
@@ -144,17 +145,21 @@ def _activity(issue: Issue) -> dict:
 
 
 def notify_new_issue(issue_id: UUID | str) -> None:
-    """Send the project subscribers the in-app notification and the email of a new work item.
+    """Tell the project subscribers of a new work item: in-app notification and email.
 
     Upstream never notifies a work item's creation: ``create_issue_activity`` keeps the "created"
     activity out of the activities it hands to the ``notifications`` task. The author is left out (no
     notification for one's own action), and so are the assignees, whom upstream already notifies of
     the assignment. The email follows the "Property changes" preference, as upstream's emails of
-    property changes do, and goes through upstream's email log and template.
+    property changes do.
     """
-    issue = Issue.issue_objects.filter(pk=issue_id).select_related("project", "project__workspace", "state").first()
+    issue = (
+        Issue.issue_objects.filter(pk=issue_id)
+        .select_related("project", "project__workspace", "state", "created_by")
+        .first()
+    )
     if issue is None or issue.created_by_id is None:
-        return  # nobody to show as the author (upstream logs need one)
+        return  # nobody to show as the author
     assignees = set(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
     receivers = [
         subscriber_id
@@ -165,20 +170,6 @@ def notify_new_issue(issue_id: UUID | str) -> None:
         return
 
     project = issue.project
-    details = {
-        "id": str(issue.id),
-        "name": issue.name,
-        "identifier": project.identifier,
-        "sequence_id": issue.sequence_id,
-        "state_name": issue.state.name if issue.state else "",
-        "state_group": issue.state.group if issue.state else "",
-    }
-    activity = _activity(issue)
-    emailed = set(
-        UserNotificationPreference.objects.filter(user_id__in=receivers, property_change=True).values_list(
-            "user_id", flat=True
-        )
-    )
     Notification.objects.bulk_create(
         [
             Notification(
@@ -190,28 +181,84 @@ def notify_new_issue(issue_id: UUID | str) -> None:
                 entity_identifier=issue.id,
                 entity_name="issue",
                 title="created the work item",
-                data={"issue": details, "issue_activity": activity},
-            )
-            for receiver_id in receivers
-        ]
-    )
-    EmailNotificationLog.objects.bulk_create(
-        [
-            EmailNotificationLog(
-                triggered_by_id=issue.created_by_id,
-                receiver_id=receiver_id,
-                entity_identifier=issue.id,
-                entity_name="issue",
                 data={
                     "issue": {
-                        **details,
-                        "project_id": str(project.id),
-                        "workspace_slug": project.workspace.slug,
+                        "id": str(issue.id),
+                        "name": issue.name,
+                        "identifier": project.identifier,
+                        "sequence_id": issue.sequence_id,
+                        "state_name": issue.state.name if issue.state else "",
+                        "state_group": issue.state.group if issue.state else "",
                     },
-                    "issue_activity": activity,
+                    "issue_activity": _activity(issue),
                 },
             )
             for receiver_id in receivers
-            if receiver_id in emailed
         ]
     )
+    emailed = UserNotificationPreference.objects.filter(user_id__in=receivers, property_change=True).values_list(
+        "user_id", flat=True
+    )
+    send_new_issue_emails(issue, list(emailed))
+
+
+NEW_WORK_ITEM_TEMPLATE = "emails/extended/new-work-item.html"
+
+
+def send_new_issue_emails(issue: Issue, receiver_ids: list[UUID]) -> None:
+    """Email the new work item with the fork's template, through the instance's SMTP settings.
+
+    Upstream's batched work item emails (``EmailNotificationLog``, ``issue-updates.html``) only know
+    updates: their text would read "Updates were made to the issue". The connection and the message
+    are built as in upstream's email tasks (``bgtasks/project_add_user_email_task.py``).
+    """
+    if not receiver_ids:
+        return
+    host, user, password, port, use_tls, use_ssl, sender = get_email_configuration()
+    if not host:
+        return  # email is not configured on this instance
+
+    project = issue.project
+    slug = project.workspace.slug
+    app_url = (settings.APP_BASE_URL or settings.WEB_URL or "").rstrip("/")
+    identifier = f"{project.identifier}-{issue.sequence_id}"
+    author = issue.created_by
+    author_name = author.display_name or author.first_name or author.email
+    assignee_names = list(
+        User.objects.filter(issue_assignee__issue_id=issue.id, issue_assignee__deleted_at__isnull=True).values_list(
+            "display_name", flat=True
+        )
+    )
+    context = {
+        "author_name": author_name,
+        "work_item_identifier": identifier,
+        "work_item_name": issue.name,
+        "project_name": project.name,
+        "workspace_name": project.workspace.name,
+        "state_name": issue.state.name if issue.state else "",
+        "priority": issue.priority if issue.priority and issue.priority != "none" else "",
+        "assignees": ", ".join(assignee_names),
+        "work_item_url": f"{app_url}/{slug}/browse/{identifier}/",
+        "preferences_url": f"{app_url}/{slug}/settings/account/notifications/",
+    }
+    subject = " ".join(f"{author_name} created {identifier} {issue.name}".split())  # no line breaks in headers
+
+    connection = get_connection(
+        host=host,
+        port=int(port),
+        username=user,
+        password=password,
+        use_tls=use_tls == "1",
+        use_ssl=use_ssl == "1",
+    )
+    for receiver in User.objects.filter(id__in=receiver_ids).only("email"):
+        html = render_to_string(NEW_WORK_ITEM_TEMPLATE, {**context, "email": receiver.email})
+        message = EmailMultiAlternatives(
+            subject=subject,
+            body=generate_plain_text_from_html(html),
+            from_email=sender,
+            to=[receiver.email],
+            connection=connection,
+        )
+        message.attach_alternative(html, "text/html")
+        message.send()
