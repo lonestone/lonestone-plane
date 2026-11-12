@@ -239,6 +239,17 @@ New routes go in `plane/extended/urls.py`. The only upstream-touching lines for 
 
 **New fields on existing models** — this is the danger zone (see below); prefer companion models in `plane.extended` with `extended_*` tables.
 
+### Announcements
+
+A one-time dialog told to some users after a release (for instance, LONESTONEP-8 tells project admins that they now follow their projects' new work items). Upstream's `GlobalModals` renders the fork's `Announcements` once for all: a new announcement does not touch upstream code.
+
+1. **Server**: add a key to `ANNOUNCEMENTS` in `plane/extended/services/announcements.py`. Its function returns the data the dialog needs, or `None` when it has nothing left to say (the dialog is then not shown).
+2. **Audience**: a data migration in `plane/extended/migrations/` queues the users, fixed at release time, with `queue_announcement_for(apps, key, user_ids)` from `migrations/_announcements.py`. Use historical models (`apps.get_model`) to pick the users.
+3. **Web**: add the key and its data type to `TAnnouncementData` (`oe/services/announcement.service.ts`), and a component to `ANNOUNCEMENT_CONTENTS` (`oe/components/announcements/registry.ts`). It renders the dialog's content and calls `close` to mark it seen. Texts go through i18n (en and fr).
+4. **Tests**: a contract test for its data and its migration (`tests/contract/app/test_announcements_app.py`), an e2e test of the dialog.
+
+Users see one announcement at a time, oldest first, each once. To drop an announcement, remove its key from both registries; rows left in `extended_user_announcements` are ignored.
+
 ### Keeping upstream changes minimal
 
 The tiers above say where code should go. This section is about the cases where a feature cannot avoid upstream code (`core/`, `ce/`, `packages/`, `plane.*` outside `plane.extended`), and how to keep that part as small as possible. The examples come from the bulk edit feature (LONESTONEP-5), which went from 19 changed upstream files to 7.

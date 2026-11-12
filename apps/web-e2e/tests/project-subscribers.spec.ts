@@ -18,9 +18,7 @@ import {
 import { djangoShell, emailsTo } from "./helpers/mail";
 import { projectMembersSettingsUrl, WEB_URL, workItemUrl } from "./helpers/urls";
 
-// LONESTONEP-8: project admins are project subscribers by default and choose the others in Project
-// Settings → Members; a project subscriber follows every new work item of the project and is told of it
-// (Inbox and email).
+// LONESTONEP-8: project subscribers (Project Settings → Members) are told of each new work item.
 
 /**
  * The subscribers picker of the "Project subscribers" section. Upstream's dropdown nests its button in
@@ -176,7 +174,7 @@ test("a project admin of before the release is told once, in a dialog, how to st
 
   const seen = page.waitForResponse(
     (response) =>
-      response.url().includes("/announcements/project-subscribers/") && response.request().method() === "POST"
+      response.url().includes("/announcements/project_subscribers/seen/") && response.request().method() === "POST"
   );
   await dialog.getByRole("button", { name: "Got it" }).click();
   expect((await seen).ok()).toBe(true);

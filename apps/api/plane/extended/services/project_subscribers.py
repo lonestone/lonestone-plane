@@ -2,12 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Project subscribers (LONESTONEP-8), as Plane's Enterprise Grid "Project subscribers".
-
-A project subscriber is subscribed to each work item of the project: upstream then sends them the
-in-app notification and, per their email preferences, the email of every tracked change, as to any
-work item subscriber. The fork only creates ``IssueSubscriber`` rows; it never deletes any.
-"""
+"""Project subscribers (LONESTONEP-8), as Plane's Enterprise Grid "Project subscribers"."""
 
 from __future__ import annotations
 
@@ -37,13 +32,12 @@ from plane.utils.exception_logger import log_exception
 
 NOT_ELIGIBLE = "subscriber_not_eligible"
 
-# ``data.issue_activity.field`` of the "created the work item" notification. The web app renders it
-# through the fork's entry in ADDITIONAL_NOTIFICATION_CONTENT_MAP (oe/components/workspace-notifications).
+# Rendered by the web app's FORK_NOTIFICATION_CONTENT_MAP.
 NEW_WORK_ITEM_FIELD = "project_subscription"
 
 
 class SubscriberNotEligible(ValueError):
-    """The user is not an active member of the project with the Member or Admin role."""
+    pass
 
 
 def _eligible_members(project_id: UUID | str):
@@ -51,7 +45,6 @@ def _eligible_members(project_id: UUID | str):
 
 
 def is_eligible_member(project_id: UUID | str, user_id: UUID | str) -> bool:
-    """Only active project members with the Member or Admin role can be project subscribers."""
     return _eligible_members(project_id).filter(member_id=user_id).exists()
 
 
@@ -64,12 +57,7 @@ def _active_admin_ids(project_id: UUID | str) -> list[UUID]:
 
 
 def subscriber_entries(project_id: UUID | str) -> list[dict]:
-    """The project's subscribers, as the API lists them: ``subscriber_id`` and ``default``.
-
-    ``default`` is true for an active project admin who is a subscriber because of their role (fork
-    choice, not in Plane): they have no row, or only the row of an earlier addition. Members added by
-    an admin are listed while they are active members with the Member or Admin role.
-    """
+    """Active admins (``default``, unless they opted out) then the members an admin added."""
     eligible = _eligible_members(project_id).filter(member_id=OuterRef("subscriber_id"))
     rows = ProjectSubscriber.objects.filter(project_id=project_id)
     added = list(rows.filter(is_subscribed=True).filter(Exists(eligible)).values_list("subscriber_id", flat=True))
@@ -81,8 +69,6 @@ def subscriber_entries(project_id: UUID | str) -> list[dict]:
 
 
 def eligible_subscriber_ids(project_id: UUID | str) -> list[UUID]:
-    """Who the project subscribes to its new work items: its active admins, unless they removed
-    themselves, and the members an admin added (still active, Member or Admin role)."""
     return [entry["subscriber_id"] for entry in subscriber_entries(project_id)]
 
 
@@ -91,12 +77,7 @@ def subscribe_to_issues(
     subscriber_ids: Iterable[UUID | str],
     issue_ids: Iterable[UUID | str],
 ) -> None:
-    """Subscribe each subscriber to each work item, skipping the subscriptions that already exist.
-
-    ``bulk_create`` never calls ``save()``: no activity and no notification come with these
-    subscriptions. Upstream's unique constraint on live work item subscribers makes
-    ``ignore_conflicts`` skip a subscription that exists, even one created at the same time.
-    """
+    """No activity nor notification (``bulk_create``); existing subscriptions are skipped."""
     subscriber_ids = list(subscriber_ids)
     if not subscriber_ids:
         return
@@ -121,25 +102,18 @@ def subscribe_to_issues(
 
 
 def subscribe_new_issue(issue: Issue) -> None:
-    """Subscribe the project subscribers to a work item that was just created."""
     subscribe_to_issues(issue.project_id, eligible_subscriber_ids(issue.project_id), [issue.id])
 
 
 def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscriber, bool]:
-    """Make an eligible project member a project subscriber; returns the row and whether it is new.
-
-    Raises ``SubscriberNotEligible`` for anyone but an active member with the Member or Admin role. Adding
-    someone who is already a subscriber subscribes them again to the current work items.
-    """
+    """Also subscribes them to the current work items, as Plane does."""
     if not is_eligible_member(project.id, user_id):
         raise SubscriberNotEligible(NOT_ELIGIBLE)
     subscriber, created = ProjectSubscriber.objects.get_or_create(project=project, subscriber_id=user_id)
-    if not subscriber.is_subscribed:  # an admin who had removed themselves
+    if not subscriber.is_subscribed:  # an admin who had opted out
         subscriber.is_subscribed = True
         subscriber.save(update_fields=["is_subscribed", "updated_at"])
         created = True
-    # As in Plane, a new project subscriber also follows the project's current work items.
-    # ``issue_objects`` leaves out archived and deleted work items, drafts and intake items in triage.
     subscribe_to_issues(
         project.id, [user_id], Issue.issue_objects.filter(project_id=project.id).values_list("id", flat=True)
     )
@@ -147,11 +121,7 @@ def add_subscriber(project: Project, user_id: UUID | str) -> tuple[ProjectSubscr
 
 
 def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:
-    """Stop subscribing the member to new work items; the work items they follow stay followed.
-
-    An active project admin, a subscriber by default, keeps a row with ``is_subscribed=False``. For anyone
-    else the row is deleted for good (``soft=False``): a project subscription has nothing to restore.
-    """
+    """The work items they follow stay followed. An admin keeps an opt-out row."""
     if str(user_id) in {str(admin_id) for admin_id in _active_admin_ids(project_id)}:
         ProjectSubscriber.objects.update_or_create(
             project_id=project_id, subscriber_id=user_id, defaults={"is_subscribed": False}
@@ -161,18 +131,42 @@ def remove_subscriber(project_id: UUID | str, user_id: UUID | str) -> None:
 
 
 def forget_member(project_id: UUID | str, user_id: UUID | str) -> None:
-    """Drop the member's row (subscription or opt-out): they left the project, or stopped being an admin."""
     ProjectSubscriber.objects.filter(project_id=project_id, subscriber_id=user_id).delete(soft=False)
 
 
-def revoke_unreadable_follows(user_id: UUID | str, project_ids: Iterable[UUID | str]) -> None:
-    """Unsubscribe a guest from the work items of these projects that they can no longer open.
+def subscribed_admin_projects(user) -> list[dict]:
+    """Projects where the user is an active admin and has not opted out, by workspace then name."""
+    opted_out = ProjectSubscriber.objects.filter(subscriber=user, is_subscribed=False).values_list(
+        "project_id", flat=True
+    )
+    memberships = (
+        ProjectMember.objects.filter(
+            member=user,
+            is_active=True,
+            role=ROLE.ADMIN.value,
+            project__archived_at__isnull=True,
+            project__deleted_at__isnull=True,
+        )
+        .exclude(project_id__in=opted_out)
+        .select_related("project", "project__workspace")
+        .order_by("project__workspace__name", "project__name")
+    )
+    return [
+        {
+            "project_id": str(membership.project_id),
+            "project_name": membership.project.name,
+            "workspace_slug": membership.project.workspace.slug,
+            "workspace_name": membership.project.workspace.name,
+        }
+        for membership in memberships
+    ]
 
-    Upstream sends a work item's notifications to its subscribers who are active members of the project,
-    whatever their role, but a guest only opens the work items they created, unless the project has
-    "Guest access" on (``guest_view_all_features``, read gate of ``IssueViewSet.retrieve``). The
-    subscriptions a project subscription created (or any other one) would leak titles, values and
-    comments to a member turned guest. Soft deletion, as upstream's "Unsubscribe".
+
+def revoke_unreadable_follows(user_id: UUID | str, project_ids: Iterable[UUID | str]) -> None:
+    """Unsubscribe a guest from the work items they can no longer open.
+
+    Upstream notifies subscribers whatever their role, but a guest only opens their own work items
+    unless ``guest_view_all_features`` is on: the notifications would leak to a member turned guest.
     """
     project_ids = list(
         Project.objects.filter(pk__in=list(project_ids), guest_view_all_features=False).values_list("id", flat=True)
@@ -185,7 +179,6 @@ def revoke_unreadable_follows(user_id: UUID | str, project_ids: Iterable[UUID | 
 
 
 def _activity(issue: Issue) -> dict:
-    """The ``issue_activity`` part of upstream's notification data, for "created the work item"."""
     return {
         "id": "",
         "verb": "created",
@@ -201,26 +194,19 @@ def _activity(issue: Issue) -> dict:
 
 
 def notify_new_issue(issue_id: UUID | str) -> None:
-    """Tell the project subscribers of a new work item: in-app notification and email.
+    """Inbox notification and email; upstream never notifies a creation.
 
-    Upstream never notifies a work item's creation: ``create_issue_activity`` keeps the "created"
-    activity out of the activities it hands to the ``notifications`` task. The author is left out (no
-    notification for one's own action), and so are the assignees, whom upstream already notifies of
-    the assignment. The email follows the "Property changes" preference, as upstream's emails of
-    property changes do.
+    Skips the author and the assignees (upstream tells them of the assignment). The email follows the
+    "Property changes" preference. ``Issue.objects``, not ``issue_objects``, to include intake items.
     """
-    # ``Issue.objects`` rather than ``issue_objects``: a work item sent through the intake (triage state)
-    # is a new work item too. Drafts and archived work items are left out.
     issue = (
         Issue.objects.filter(pk=issue_id, is_draft=False, archived_at__isnull=True)
         .select_related("project", "project__workspace", "state", "created_by")
         .first()
     )
     if issue is None or issue.created_by_id is None:
-        return  # nobody to show as the author
-    if issue.created_by.is_bot:
-        # Bot authors: the sample work items upstream seeds in a new workspace
-        # (``bgtasks/workspace_seed_task.py``) would flood the admin's Inbox.
+        return
+    if issue.created_by.is_bot:  # the sample work items seeded in a new workspace
         return
     assignees = set(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
     receivers = [
@@ -268,17 +254,12 @@ NEW_WORK_ITEM_TEMPLATE = "emails/extended/new-work-item.html"
 
 
 def send_new_issue_emails(issue: Issue, receiver_ids: list[UUID]) -> None:
-    """Email the new work item with the fork's template, through the instance's SMTP settings.
-
-    Upstream's batched work item emails (``EmailNotificationLog``, ``issue-updates.html``) only know
-    updates: their text would read "Updates were made to the issue". The connection and the message
-    are built as in upstream's email tasks (``bgtasks/project_add_user_email_task.py``).
-    """
+    """Fork template: upstream's work item email only says "Updates were made to the issue"."""
     if not receiver_ids:
         return
     host, user, password, port, use_tls, use_ssl, sender = get_email_configuration()
     if not host:
-        return  # email is not configured on this instance
+        return
 
     project = issue.project
     slug = project.workspace.slug

@@ -5,15 +5,11 @@
  */
 
 import { Link } from "react-router";
-import useSWR from "swr";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
-import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
-import { announcementService } from "@/plane-web/services/announcement.service";
 import type { TSubscribedAdminProject } from "@/plane-web/services/announcement.service";
+import type { TAnnouncementProps } from "./registry";
 import howToUnsubscribe from "./assets/how-to-unsubscribe.png?url";
-
-const SWR_KEY = "EXTENDED_PROJECT_SUBSCRIBERS_ANNOUNCEMENT";
 
 function groupByWorkspace(projects: TSubscribedAdminProject[]): [string, TSubscribedAdminProject[]][] {
   const groups = new Map<string, TSubscribedAdminProject[]>();
@@ -23,27 +19,12 @@ function groupByWorkspace(projects: TSubscribedAdminProject[]): [string, TSubscr
   return [...groups.entries()];
 }
 
-/**
- * Shown once to the users who were project admins when LONESTONEP-8 shipped (the server keeps who has
- * seen it): project admins now follow every new work item of their projects, and can remove themselves.
- * Rendered by upstream's GlobalModals (core/components/common/modal/global.tsx).
- */
-export function ProjectSubscribersAnnouncementModal() {
+/** LONESTONEP-8: project admins now follow their projects' new work items. */
+export function ProjectSubscribersAnnouncement({ data, close }: TAnnouncementProps<"project_subscribers">) {
   const { t } = useTranslation();
-  const { data, mutate } = useSWR(SWR_KEY, () => announcementService.projectSubscribers(), {
-    revalidateOnFocus: false,
-    shouldRetryOnError: false,
-  });
-
-  const close = () => {
-    void mutate({ show: false, projects: [] }, { revalidate: false });
-    void announcementService.markProjectSubscribersSeen().catch(() => undefined);
-  };
-
-  if (!data?.show) return null;
 
   return (
-    <ModalCore isOpen handleClose={close} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
+    <>
       <div className="flex flex-col gap-4 p-5">
         <h3 className="text-16 font-medium">{t("project_settings.subscribers.announcement.title")}</h3>
         <p className="text-13 text-secondary">{t("project_settings.subscribers.announcement.projects")}</p>
@@ -80,6 +61,6 @@ export function ProjectSubscribersAnnouncementModal() {
           {t("project_settings.subscribers.announcement.got_it")}
         </Button>
       </div>
-    </ModalCore>
+    </>
   );
 }

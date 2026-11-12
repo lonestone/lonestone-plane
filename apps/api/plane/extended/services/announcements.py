@@ -2,55 +2,44 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""One-time announcement to project admins (LONESTONEP-8): they now follow their projects' new work items."""
+"""One-time announcements of the fork (docs/architecture/fork-maintenance.md, "Announcements")."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from django.utils import timezone
 
-from plane.app.permissions.base import ROLE
-from plane.db.models import ProjectMember
-from plane.extended.models import ProjectSubscriber, UserAnnouncement
+from plane.extended.models import UserAnnouncement
+from plane.extended.services.project_subscribers import subscribed_admin_projects
 
 PROJECT_SUBSCRIBERS = "project_subscribers"
 
 
-def subscribed_admin_projects(user) -> list[dict]:
-    """Projects where the user is an active admin and has not removed themselves from the subscribers."""
-    opted_out = ProjectSubscriber.objects.filter(subscriber=user, is_subscribed=False).values_list(
-        "project_id", flat=True
+def _project_subscribers(user) -> dict | None:
+    projects = subscribed_admin_projects(user)
+    return {"projects": projects} if projects else None
+
+
+# key -> data of the announcement for the user, or None when it has nothing left to say (not shown).
+ANNOUNCEMENTS: dict[str, Callable[..., dict | None]] = {
+    PROJECT_SUBSCRIBERS: _project_subscribers,
+}
+
+
+def pending_announcements(user) -> list[dict]:
+    keys = (
+        UserAnnouncement.objects.filter(user=user, seen_at__isnull=True, key__in=ANNOUNCEMENTS)
+        .order_by("created_at")
+        .values_list("key", flat=True)
     )
-    memberships = (
-        ProjectMember.objects.filter(
-            member=user,
-            is_active=True,
-            role=ROLE.ADMIN.value,
-            project__archived_at__isnull=True,
-            project__deleted_at__isnull=True,
-        )
-        .exclude(project_id__in=opted_out)
-        .select_related("project", "project__workspace")
-        .order_by("project__workspace__name", "project__name")
-    )
-    return [
-        {
-            "project_id": str(membership.project_id),
-            "project_name": membership.project.name,
-            "workspace_slug": membership.project.workspace.slug,
-            "workspace_name": membership.project.workspace.name,
-        }
-        for membership in memberships
-    ]
+    pending = []
+    for key in keys:
+        data = ANNOUNCEMENTS[key](user)
+        if data is not None:
+            pending.append({"key": key, "data": data})
+    return pending
 
 
-def project_subscribers_announcement(user) -> dict:
-    """``show`` when the announcement waits for the user and they still follow at least one project."""
-    pending = UserAnnouncement.objects.filter(user=user, key=PROJECT_SUBSCRIBERS, seen_at__isnull=True).exists()
-    projects = subscribed_admin_projects(user) if pending else []
-    return {"show": bool(projects), "projects": projects}
-
-
-def mark_project_subscribers_announcement_seen(user) -> None:
-    UserAnnouncement.objects.filter(user=user, key=PROJECT_SUBSCRIBERS, seen_at__isnull=True).update(
-        seen_at=timezone.now()
-    )
+def mark_announcement_seen(user, key: str) -> None:
+    UserAnnouncement.objects.filter(user=user, key=key, seen_at__isnull=True).update(seen_at=timezone.now())

@@ -2,12 +2,11 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""LONESTONEP-8: tell the current project admins, once, that they now follow their projects' new work items.
-
-Users who become project admins later get no announcement: it announces a change, not a feature tour.
-"""
+"""LONESTONEP-8: tell the current project admins, once, that they now follow their projects."""
 
 from django.db import migrations
+
+from plane.extended.migrations._announcements import queue_announcement_for
 
 ANNOUNCEMENT = "project_subscribers"
 ADMIN = 20
@@ -15,7 +14,6 @@ ADMIN = 20
 
 def queue_announcement(apps, schema_editor):
     ProjectMember = apps.get_model("db", "ProjectMember")
-    UserAnnouncement = apps.get_model("extended", "UserAnnouncement")
     admin_ids = (
         ProjectMember.objects.filter(
             is_active=True,
@@ -28,11 +26,7 @@ def queue_announcement(apps, schema_editor):
         .values_list("member_id", flat=True)
         .distinct()
     )
-    UserAnnouncement.objects.bulk_create(
-        [UserAnnouncement(user_id=user_id, key=ANNOUNCEMENT) for user_id in admin_ids],
-        ignore_conflicts=True,
-        batch_size=1000,
-    )
+    queue_announcement_for(apps, ANNOUNCEMENT, admin_ids)
 
 
 class Migration(migrations.Migration):

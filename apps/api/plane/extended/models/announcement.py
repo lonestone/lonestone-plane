@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""One-time announcements of the fork to a user (LONESTONEP-8: project admins are now project subscribers)."""
+"""One-time announcements of the fork to a user."""
 
 from __future__ import annotations
 
@@ -13,11 +13,7 @@ from plane.db.models import BaseModel
 
 
 class UserAnnouncement(BaseModel):
-    """An announcement waiting for a user (``seen_at`` empty) or already seen.
-
-    Rows are created for the users the announcement concerns (for instance by a data migration at
-    release time); a user without a row never sees it.
-    """
+    """Waiting while ``seen_at`` is empty; a user without a row never sees it."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,

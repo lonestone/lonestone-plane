@@ -7,11 +7,12 @@
 from django.urls import path
 
 from plane.extended.views import (
+    AnnouncementListEndpoint,
+    AnnouncementSeenEndpoint,
     ProjectGuestCollaborationEndpoint,
     ProjectIssueBulkUpdateEndpoint,
     ProjectSubscriberDetailEndpoint,
     ProjectSubscriberEndpoint,
-    ProjectSubscribersAnnouncementEndpoint,
     ProjectTemplateApplyEndpoint,
     ProjectTemplateEndpoint,
     ProjectTemplatePreviewEndpoint,
@@ -59,8 +60,13 @@ urlpatterns = [
         name="extended-project-subscriber-detail",
     ),
     path(
-        "users/me/announcements/project-subscribers/",
-        ProjectSubscribersAnnouncementEndpoint.as_view(),
-        name="extended-project-subscribers-announcement",
+        "users/me/announcements/",
+        AnnouncementListEndpoint.as_view(),
+        name="extended-announcements",
+    ),
+    path(
+        "users/me/announcements/<str:key>/seen/",
+        AnnouncementSeenEndpoint.as_view(),
+        name="extended-announcement-seen",
     ),
 ]
