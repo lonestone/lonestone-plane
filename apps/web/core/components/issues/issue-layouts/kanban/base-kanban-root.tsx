@@ -24,6 +24,7 @@ import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
 import { useGroupIssuesDragNDrop } from "@/hooks/use-group-dragndrop";
 import { useIssueStoreType } from "@/hooks/use-issue-layout-store";
 import { useIssuesActions } from "@/hooks/use-issues-actions";
+import { BoardSelection } from "@/plane-web/components/issues/board-selection";
 // store
 // ui
 // types
@@ -291,6 +292,7 @@ export const BaseKanBanRoot = observer(function BaseKanBanRoot(props: IBaseKanBa
             </div>
           </div>
         </div>
+        <BoardSelection containerRef={scrollableContainerRef} groupedIssueIds={groupedIssueIds} isEpic={isEpic} />
       </IssueLayoutHOC>
     </>
   );
