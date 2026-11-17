@@ -11,8 +11,8 @@ from plane.utils.exception_logger import log_exception
 
 
 @shared_task
-def notify_project_subscribers_of_new_issue(issue_id: str) -> None:
+def notify_project_subscribers_of_new_issue(issue_id: str, default_assignee_id: str | None = None) -> None:
     try:
-        notify_new_issue(issue_id)
+        notify_new_issue(issue_id, default_assignee_id)
     except Exception as exception:  # noqa: BLE001  a failed notification must not fail the worker
         log_exception(exception)

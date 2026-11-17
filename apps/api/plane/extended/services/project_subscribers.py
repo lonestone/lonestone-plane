@@ -177,11 +177,12 @@ def _activity(issue: Issue) -> dict:
     }
 
 
-def notify_new_issue(issue_id: UUID | str) -> None:
+def notify_new_issue(issue_id: UUID | str, default_assignee_id: UUID | str | None = None) -> None:
     """Inbox notification and email; upstream never notifies a creation.
 
-    Skips the author and the assignees (upstream tells them of the assignment). The email follows the
-    "Property changes" preference. ``Issue.objects``, not ``issue_objects``, to include intake items.
+    Skips the author and the assignees (upstream tells them of the assignment), except the project's
+    default assignee, whom upstream does not tell: ``default_assignee_id`` notifies them alone. The email
+    follows the "Property changes" preference. ``Issue.objects``, not ``issue_objects``, to include intake items.
     """
     issue = (
         Issue.objects.filter(pk=issue_id, is_draft=False, archived_at__isnull=True)
@@ -192,12 +193,18 @@ def notify_new_issue(issue_id: UUID | str) -> None:
         return
     if issue.created_by.is_bot:  # the sample work items seeded in a new workspace
         return
-    assignees = set(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
-    receivers = [
+    subscriber_ids = [
         subscriber_id
         for subscriber_id in eligible_subscriber_ids(issue.project_id)
-        if subscriber_id != issue.created_by_id and subscriber_id not in assignees
+        if subscriber_id != issue.created_by_id
     ]
+    if default_assignee_id is not None:
+        receivers = [
+            subscriber_id for subscriber_id in subscriber_ids if str(subscriber_id) == str(default_assignee_id)
+        ]
+    else:
+        assignees = set(IssueAssignee.objects.filter(issue_id=issue.id).values_list("assignee_id", flat=True))
+        receivers = [subscriber_id for subscriber_id in subscriber_ids if subscriber_id not in assignees]
     if not receivers:
         return
 

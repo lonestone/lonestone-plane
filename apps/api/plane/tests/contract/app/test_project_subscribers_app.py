@@ -18,6 +18,7 @@ from plane.db.models import (
     EmailNotificationLog,
     Intake,
     Issue,
+    IssueAssignee,
     IssueSubscriber,
     Notification,
     Project,
@@ -173,6 +174,38 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         fields = _notified_fields(manager, issue_id)
         assert "project_subscription" not in fields
         assert "assignees" in fields
+
+    def test_default_assignee_subscriber_is_told_once(self, workspace, project, manager, author):
+        """Upstream assigns the default assignee without telling them (LONESTONEP-8, guest's ticket "aaaaa")."""
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        project.default_assignee = manager
+        project.save(update_fields=["default_assignee"])
+
+        issue_id = self._create(client_for(author), workspace, project)
+
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert _notified_fields(manager, issue_id) == ["project_subscription"]
+        assert len([message for message in mail.outbox if message.to == [manager.email]]) == 1
+
+    def test_default_assignee_picked_by_the_author_only_gets_the_assignment(self, workspace, project, manager, author):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+        project.default_assignee = manager
+        project.save(update_fields=["default_assignee"])
+
+        issue_id = self._create(client_for(author), workspace, project, assignee_ids=[str(manager.id)])
+
+        fields = _notified_fields(manager, issue_id)
+        assert "project_subscription" not in fields
+        assert "assignees" in fields
+
+    def test_default_assignee_who_is_not_a_subscriber_is_not_told(self, workspace, project, manager, author):
+        project.default_assignee = manager
+        project.save(update_fields=["default_assignee"])
+
+        issue_id = self._create(client_for(author), workspace, project)
+
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
 
     def test_project_subscriber_is_told_of_the_changes_that_follow(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
