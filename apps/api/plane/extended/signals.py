@@ -9,7 +9,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from plane.app.permissions.base import ROLE
-from plane.db.models import Issue, IssueActivity, ProjectMember, WorkspaceMember
+from plane.db.models import Issue, IssueActivity, IssueAssignee, Project, ProjectMember, WorkspaceMember
 from plane.extended.models import ProjectSubscriber
 from plane.extended.services.project_subscribers import (
     forget_member,
@@ -33,6 +33,25 @@ def notify_project_subscribers(sender, instance, created, raw=False, **kwargs):
         return
     issue_id = str(instance.issue_id)
     transaction.on_commit(lambda: notify_project_subscribers_of_new_issue.delay(issue_id))
+
+
+@receiver(post_save, sender=IssueAssignee, dispatch_uid="extended_notify_default_assignee")
+def notify_default_assignee(sender, instance, created, raw=False, **kwargs):
+    """The project's default assignee follows a new work item but upstream tells them nothing.
+
+    Upstream saves explicit assignees with ``bulk_create`` (no signal) and the default assignee with
+    ``objects.create``; ``notify_new_issue`` skips assignees, so the default one is notified here.
+    Only while the work item is being created: its "created" activity is logged after this, by the
+    ``issue_activity`` task, so a later assignment never announces an old work item.
+    """
+    if not created or raw:
+        return
+    if not Project.objects.filter(pk=instance.project_id, default_assignee_id=instance.assignee_id).exists():
+        return
+    if IssueActivity.objects.filter(issue_id=instance.issue_id, verb="created", field__isnull=True).exists():
+        return
+    issue_id, assignee_id = str(instance.issue_id), str(instance.assignee_id)
+    transaction.on_commit(lambda: notify_project_subscribers_of_new_issue.delay(issue_id, assignee_id))
 
 
 @receiver(post_save, sender=ProjectMember, dispatch_uid="extended_remove_departed_project_subscriber")

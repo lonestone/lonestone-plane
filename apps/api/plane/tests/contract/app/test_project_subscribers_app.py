@@ -18,6 +18,7 @@ from plane.db.models import (
     EmailNotificationLog,
     Intake,
     Issue,
+    IssueAssignee,
     IssueSubscriber,
     Notification,
     Project,
@@ -44,6 +45,10 @@ def _make_state(project, name, group="started"):
     return State.objects.create(
         name=name, color="#000000", project=project, workspace=project.workspace, sequence=2, group=group
     )
+
+
+def _mails_to(user):
+    return [message for message in mail.outbox if message.to == [user.email]]
 
 
 def _notified_fields(user, issue_id):
@@ -147,7 +152,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         assert notification.triggered_by_id == author.id
         assert notification.data["issue_activity"]["verb"] == "created"
         assert notification.data["issue_activity"]["field"] == "project_subscription"
-        sent = [message for message in mail.outbox if message.to == [manager.email]]
+        sent = _mails_to(manager)
         assert len(sent) == 1
         assert sent[0].subject == f"{author.display_name} created SUBS-1 New ticket"
         html = sent[0].alternatives[0][0]
@@ -160,7 +165,7 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         issue_id = self._create(client_for(author), workspace, project)
 
         assert Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
-        assert not [message for message in mail.outbox if message.to == [manager.email]]
+        assert not _mails_to(manager)
 
     def test_author_is_not_told_of_their_own_work_item(self, workspace, project, manager):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)
@@ -173,6 +178,68 @@ class TestNewWorkItemNotifiesProjectSubscribers:
         fields = _notified_fields(manager, issue_id)
         assert "project_subscription" not in fields
         assert "assignees" in fields
+
+    @pytest.fixture
+    def manager_is_default_assignee(self, project, manager):
+        project.default_assignee = manager
+        project.save(update_fields=["default_assignee"])
+
+    def test_default_assignee_subscriber_is_told_once(
+        self, workspace, project, manager, author, manager_is_default_assignee
+    ):
+        """Upstream assigns the default assignee without telling them (LONESTONEP-8, guest's ticket "aaaaa")."""
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+
+        issue_id = self._create(client_for(author), workspace, project)
+
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert _notified_fields(manager, issue_id) == ["project_subscription"]
+        assert len(_mails_to(manager)) == 1
+
+    def test_default_assignee_is_told_through_the_public_api(
+        self, workspace, project, manager, api_key_client, manager_is_default_assignee
+    ):
+        """``/api/v1`` assigns the default assignee in its own serializer (``plane.api.serializers.issue``)."""
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+
+        url = f"/api/v1/workspaces/{workspace.slug}/projects/{project.id}/issues/"
+        response = api_key_client.post(url, {"name": "From the API"}, format="json")
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        issue_id = response.data["id"]
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert _notified_fields(manager, issue_id) == ["project_subscription"]
+        assert len(_mails_to(manager)) == 1
+
+    def test_default_assignee_picked_by_the_author_only_gets_the_assignment(
+        self, workspace, project, manager, author, manager_is_default_assignee
+    ):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+
+        issue_id = self._create(client_for(author), workspace, project, assignee_ids=[str(manager.id)])
+
+        fields = _notified_fields(manager, issue_id)
+        assert "project_subscription" not in fields
+        assert "assignees" in fields
+
+    def test_default_assignee_who_is_not_a_subscriber_is_not_told(
+        self, workspace, project, manager, author, manager_is_default_assignee
+    ):
+        issue_id = self._create(client_for(author), workspace, project)
+
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
+
+    def test_default_assignee_who_creates_the_work_item_is_not_told(
+        self, workspace, project, manager, manager_is_default_assignee
+    ):
+        ProjectSubscriber.objects.create(project=project, subscriber=manager)
+
+        issue_id = self._create(client_for(manager), workspace, project)
+
+        assert IssueAssignee.objects.filter(issue_id=issue_id, assignee=manager).exists()
+        assert not Notification.objects.filter(receiver=manager, entity_identifier=issue_id).exists()
+        assert not _mails_to(manager)
 
     def test_project_subscriber_is_told_of_the_changes_that_follow(self, workspace, project, manager, author):
         ProjectSubscriber.objects.create(project=project, subscriber=manager)

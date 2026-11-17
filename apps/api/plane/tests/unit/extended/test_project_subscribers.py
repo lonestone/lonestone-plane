@@ -5,13 +5,15 @@
 from uuid import uuid4
 
 import pytest
+from django.utils import timezone
 
-from plane.db.models import ProjectMember, Issue, IssueActivity, IssueSubscriber, Notification
+from plane.db.models import ProjectMember, Issue, IssueActivity, IssueAssignee, IssueSubscriber, Notification, Project
 from plane.extended.models import ProjectSubscriber
 from plane.extended.services.project_subscribers import (
     add_subscriber,
     eligible_subscriber_ids,
     is_eligible_member,
+    notify_new_issue,
     remove_subscriber,
     subscriber_entries,
     subscribe_to_issues,
@@ -249,3 +251,117 @@ class TestAdminsAreSubscribersByDefault:
 
         assert manager.id in _subscriptions(issue)
         assert not Notification.objects.filter(receiver=manager).exists()
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestDefaultAssigneeIsTold:
+    """Upstream assigns the project's default assignee without telling them: the fork does, once."""
+
+    def _notified(self, user):
+        return Notification.objects.filter(receiver=user).count()
+
+    def _issue(self, project, name, author, **fields):
+        """``make_issue`` leaves ``created_by`` empty here, and a work item without author is never announced."""
+        issue = make_issue(project, name, **fields)
+        Issue.objects.filter(pk=issue.pk).update(created_by=author)
+        return issue
+
+    def test_only_the_default_assignee_is_told(self, workspace, project, create_user):
+        default_assignee = make_user(workspace, project, 15)
+        other = make_user(workspace, project, 15)
+        _subscribe_project(project, default_assignee)
+        _subscribe_project(project, other)
+        issue = self._issue(project, "New", create_user)
+
+        notify_new_issue(issue.id, default_assignee.id)
+
+        assert self._notified(default_assignee) == 1
+        assert self._notified(other) == 0
+
+    def test_author_who_is_the_default_assignee_is_not_told(self, workspace, project, create_user):
+        author = make_user(workspace, project, 15)
+        _subscribe_project(project, author)
+        issue = self._issue(project, "Mine", author)
+
+        notify_new_issue(issue.id, author.id)
+
+        assert self._notified(author) == 0
+
+    def test_default_assignee_who_is_not_a_subscriber_is_not_told(self, workspace, project, create_user):
+        default_assignee = make_user(workspace, project, 15)
+        issue = self._issue(project, "New", create_user)
+
+        notify_new_issue(issue.id, default_assignee.id)
+
+        assert self._notified(default_assignee) == 0
+
+    def test_work_item_of_a_bot_is_not_announced(self, workspace, project, create_user):
+        default_assignee = make_user(workspace, project, 15)
+        _subscribe_project(project, default_assignee)
+        bot = make_user(workspace, project, 20)
+        type(bot).objects.filter(pk=bot.pk).update(is_bot=True)
+        issue = self._issue(project, "Sample work item", bot)
+
+        notify_new_issue(issue.id, default_assignee.id)
+
+        assert self._notified(default_assignee) == 0
+
+    @pytest.mark.parametrize("fields", [{"is_draft": True}, {"archived_at": timezone.now()}])
+    def test_draft_or_archived_work_item_is_not_announced(self, workspace, project, create_user, fields):
+        default_assignee = make_user(workspace, project, 15)
+        _subscribe_project(project, default_assignee)
+        issue = self._issue(project, "Not live", create_user, **fields)
+
+        notify_new_issue(issue.id, default_assignee.id)
+
+        assert self._notified(default_assignee) == 0
+
+
+@pytest.mark.unit
+@pytest.mark.django_db
+class TestDefaultAssigneeSignal:
+    @pytest.fixture
+    def queued(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(
+            "plane.extended.signals.notify_project_subscribers_of_new_issue.delay",
+            lambda *args: calls.append(args),
+        )
+        monkeypatch.setattr("plane.extended.signals.transaction.on_commit", lambda func, *args, **kwargs: func())
+        return calls
+
+    def _assign(self, issue, user):
+        IssueAssignee.objects.create(issue=issue, assignee=user, project=issue.project, workspace=issue.workspace)
+
+    def test_default_assignee_of_a_new_work_item_is_queued(self, workspace, project, queued):
+        default_assignee = make_user(workspace, project, 15)
+        Project.objects.filter(pk=project.pk).update(default_assignee=default_assignee)
+        issue = make_issue(project, "New")
+
+        self._assign(issue, default_assignee)
+
+        assert queued == [(str(issue.id), str(default_assignee.id))]
+
+    def test_another_assignee_is_not_queued(self, workspace, project, queued):
+        default_assignee = make_user(workspace, project, 15)
+        other = make_user(workspace, project, 15)
+        Project.objects.filter(pk=project.pk).update(default_assignee=default_assignee)
+        issue = make_issue(project, "New")
+
+        self._assign(issue, other)
+
+        assert queued == []
+
+    def test_default_assignee_added_to_an_existing_work_item_is_not_queued(self, workspace, project, queued):
+        default_assignee = make_user(workspace, project, 15)
+        Project.objects.filter(pk=project.pk).update(default_assignee=default_assignee)
+        issue = make_issue(project, "Old")
+        IssueActivity.objects.create(
+            issue=issue, project=project, workspace=workspace, verb="created", comment="created the issue"
+        )
+        queued.clear()
+
+        self._assign(issue, default_assignee)
+
+        assert queued == []
