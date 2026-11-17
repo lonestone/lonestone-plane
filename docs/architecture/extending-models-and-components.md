@@ -397,54 +397,11 @@ Add integration tests for your custom components that assert the expected props 
 
 ---
 
-### Core files touched by fork features
+### Tracking core changes
 
-Some fork features need a few lines in `core/` because upstream offers no `@/plane-web` hook at that point. Re-check these after every `upstream/preview` merge.
-
-Any change to a file in `apps/web/core/` or `packages/` goes into this table, with its reason, in the same commit. A file missing from it will not be checked on the next upstream merge.
+Some fork features need a few lines in `core/` because upstream offers no `@/plane-web` hook at that point. Every upstream file the fork modifies, adds or deletes is listed in [`FORK_CHANGELOG.md`](../../FORK_CHANGELOG.md) ("Upstream files touched"), grouped by feature, along with the upstream code the fork copies or relies on ("Upstream dependencies"), in the same commit; the pre-commit hook enforces it. Re-check those files after every `upstream/preview` merge. How each feature plugs into them is summed up under the feature in that file.
 
 The pre-commit hook runs `oxlint --deny-warnings` on every committed file, so touching a `core/` file also surfaces its existing upstream warnings. Silence them with an `oxlint-disable-next-line <rule> -- upstream code, …` comment rather than fixing them: a fix rewrites upstream lines and turns the next merge of that code into a conflict.
-
-**Bulk edit of work item properties (LONESTONEP-5)**
-
-| Core file                                          | Change                                                                                                                                                      | Why                                                                                                                                   |
-| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `core/hooks/use-bulk-operation-status.ts`          | Re-exports `useBulkOperationStatus` from `@/plane-web/hooks/use-bulk-operation-status`                                                                      | Upstream hard-codes `() => false`, which hides the selection checkboxes                                                               |
-| `core/components/issues/bulk-operations/root.tsx`  | Renders `BulkOperationsBar` from `@/plane-web/components/issues/bulk-operations` instead of `BulkOperationsUpgradeBanner`                                   | Keeps upstream's display rule (active, enabled selection) and its call sites in every layout; only the paid-edition banner is swapped |
-| `core/services/issue/issue.service.ts`             | `bulkOperations` posts to `/api/extended/.../issues/bulk-update/` (URL only)                                                                                | The upstream endpoint only exists in the paid edition                                                                                 |
-| `packages/i18n/src/locales/{en,fr}/work-item.json` | Adds keys at the end of `bulk_operations` (`selected_count`, `clear_selection`, `clear_*_date`, `toast.*`, `failure_reasons.*`); no upstream key is changed | The fork has no translation namespace of its own; on a merge conflict, keep upstream's keys and re-append ours                        |
-
-The bar itself lives in `oe/components/issues/bulk-operations/`. The assignee, label and module menus copy the option rendering of the upstream dropdowns in `oe/components/issues/bulk-operations/dropdown-options.tsx` instead of importing it from `core/`; re-check it when upstream restyles those dropdowns. The backend lives in `plane.extended` (`issue_bulk_update` view, serializer and service).
-
-The API is all or nothing, to fit the upstream store: if one work item cannot take the change, it answers `400 {"error", "code"}` and writes nothing. The codes the bar translates are `not_found` (a work item was deleted, archived or moved) and `invalid_date_range` (the start date would end up after the due date). The bar sends batches of 500 work items, the API limit; if a later batch fails, the toast reports how many were saved before it.
-
-The issue stores are not modified. The bar updates the store optimistically from `oe/components/issues/bulk-operations/use-bulk-update.ts`:
-
-1. For each selected work item it computes the new values (additions merged, `remove_*` values filtered out, other properties replaced) and applies them with the store's `updateIssue(..., shouldSync = false)`. That is upstream's `issueUpdate` in local mode, the one it uses for its own local changes: it updates the work item and moves it between groups (`updateIssueList`) without calling the API. The store interfaces leave `shouldSync` out, so the hook calls it through a typed cast (`TLocalIssueUpdate`); re-check it if upstream changes `issueUpdate`.
-2. It sends the batch with `IssueService.bulkOperations`. If the API rejects it, the previous values are put back the same way.
-3. Once saved: in a module's view, work items taken out of that module leave the list (`removeIssueFromList`); in a cycle or module view, the progress stats are fetched again (`fetchCycleDetails` or `fetchModuleDetails`, plus `fetchActiveCycleProgressPro` for v2 cycles); in the background, the work items are read back (`IssueService.retrieveIssues`, 100 per request) and whatever differs from the store is applied.
-
-The view is never refetched: `fetchIssuesWithExistingPagination` clears the list first, which shows the loader, closes the open menu and resets the pagination. The removal keys are typed in `oe/components/issues/bulk-operations/types.ts`, not in the shared `TBulkOperationsPayload`, whose keys the upstream `bulkUpdateProperties` uses to index work items.
-
-**Dropped: per-work-item partial success**
-
-A first version reported a result per work item, so that one bad work item did not block the others ("48 updated, 2 skipped: start date after due date"). It was removed because it did not fit the fork's constraint of staying as close as possible to upstream: it changed upstream signatures in nine `core/` files for a feature upstream does not have. Do not bring it back without weighing that cost again. How it worked, in case it is needed:
-
-- API: `200` with `{"updated_issue_ids", "unchanged_issue_ids", "failed": [{"issue_id", "code"}]}`. A work item not found or with an invalid date range went to `failed` instead of rejecting the request; the others were still written.
-- Types: `TBulkOperationsFailureCode` and `TBulkOperationsResponse` in `packages/types/src/issues/issue.ts`.
-- Service: `bulkOperations` returned `Promise<TBulkOperationsResponse>` instead of `Promise<any>`.
-- Base store: `bulkUpdateProperties` returned the response and applied the change to `response.updated_issue_ids` only, not to every sent id (upstream assumes they all succeed). It also handled the `remove_*` keys, took work items out of the current module's list and refreshed the cycle or module stats; that part now lives in the bar (optimistic update through upstream's local `issueUpdate`).
-- The eight `core/store/issue/*/issue.store.ts` files: each interface (`IProjectIssues`, `ICycleIssues`, …) declares its own `bulkUpdateProperties` with `Promise<void>`. They all had to return `Promise<TBulkOperationsResponse>`, otherwise the bar, which reads the union of the stores, cannot access the response. TypeScript does not accept a `Promise<Response>` implementation behind a `Promise<void>` interface, so there is no way around these files without lying casts.
-- Bar: merged the responses of the batches and showed a warning toast with one counted reason per failure code (`failure_reasons.*` used ICU plurals).
-
-**Board multi-select (LONESTONEP-5, spec 002)**
-
-| Core file                                                          | Change                                                                                                                                    | Why                                                                                 |
-| ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| `core/components/issues/issue-layouts/kanban/base-kanban-root.tsx` | Renders `BoardSelection` from `@/plane-web/components/issues/board-selection` next to the board's scroll container (one import, one line) | The board has no selection upstream and no `@/plane-web` extension point            |
-| `core/components/issues/issue-layouts/kanban/block.tsx`            | Renders `BoardCardSelection` inside the card wrapper (one import, one line)                                                               | Card checkbox, selected border and touch selection; the card itself is not modified |
-
-New fork code: `oe/components/issues/board-selection/`. `BoardSelection` builds the selection groups, renders the bulk bar over the bottom of the board and publishes the selection helpers in a MobX box (`helpers-store.ts`), since it is a sibling of the board rather than a wrapper. `BoardCardSelection` reads them and wires touch selection on the card wrapper with native listeners. It only uses the upstream selection helpers (`handleEntityClick`). There is no column "select all" checkbox: upstream has no extension point in the column header, and Plane only offers bulk operations in the list and spreadsheet layouts.
 
 ---
 

@@ -1,5 +1,7 @@
 # Agent Development Guide
 
+> **Before any new feature, run `/start-feature <description>`** (or follow `.claude/skills/start-feature/SKILL.md`). It checks that Plane offers the feature, creates the branch, prepares `FORK_CHANGELOG.md` and finds the upstream extension points before any spec or code. For now this fork only builds features that Plane offers (in a paid plan, usually): if Plane does not have it, stop and say so. A feature built anyway is an exception, documented in `FORK_CHANGELOG.md` ("Features not in Plane").
+
 ## Commands
 
 - `pnpm dev` - Start all dev servers (web:3000, admin:3001)
@@ -15,6 +17,21 @@
 
 - **Backend**: All custom Django code goes in `apps/api/plane/extended/` (`plane.extended`). APIs under `/api/extended/`, DB tables `extended_*`. Do not add new top-level apps or fork migrations under `plane.db`. Details: `docs/architecture/fork-maintenance.md`.
 - **Frontend**: Edition UI/stores live in `apps/web/oe/` (`@/plane-web/*`). Fork-only routes in `apps/web/app/routes/extended.ts`.
+
+### Touching upstream code
+
+Upstream code is everything outside the fork folders: `apps/web/core/`, `apps/web/ce/`, `packages/`, and every `apps/api/plane/` package except `plane.extended`. Each line changed there can conflict on the next upstream merge, so keep the footprint as small as possible.
+
+- **Look for an extension point first**: a `@/plane-web/*` import, a CE placeholder (`docs/architecture/placeholder-map.md`), a public store method, a service. Reuse it from `oe/` rather than editing upstream code.
+- **When upstream code must change**, swap only the placeholder or add one line that renders fork code. Keep upstream logic, guards and display rules.
+- **Never change an upstream signature or shared type** to fit a fork feature. Adapt the feature or the fork API instead, and keep fork-only types in `oe/`.
+- **Prefer optimistic updates**: update the store first with upstream's own local update, call the API, revert on error. Do not refetch a whole view after a change: upstream's refetch clears the list (loader, closed menus, lost pagination).
+- **Translations**: append keys at the end of an existing namespace; never edit an upstream key.
+- **No formatting, lint-only or unrelated fixes** in upstream files. Unrelated fixes go on their own branch.
+- **List every upstream file you modify, add or delete** (any file outside the fork folders) in `FORK_CHANGELOG.md` ("Upstream files touched"), under its feature, in the same commit. Fork code that copies upstream code or calls upstream internals goes in "Upstream dependencies". The pre-commit hook blocks the commit otherwise; `node tools/check-fork-changelog.mjs` audits the whole fork against `upstream/preview`.
+- **Check the footprint** before opening a PR: `git diff --stat origin/preview -- apps/web/core apps/web/ce packages`.
+
+Details, examples and pitfalls: "Keeping upstream changes minimal" in `docs/architecture/fork-maintenance.md`.
 
 ## Code Style
 

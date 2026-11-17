@@ -239,6 +239,95 @@ New routes go in `plane/extended/urls.py`. The only upstream-touching lines for 
 
 **New fields on existing models** — this is the danger zone (see below); prefer companion models in `plane.extended` with `extended_*` tables.
 
+### Keeping upstream changes minimal
+
+The tiers above say where code should go. This section is about the cases where a feature cannot avoid upstream code (`core/`, `ce/`, `packages/`, `plane.*` outside `plane.extended`), and how to keep that part as small as possible. The examples come from the bulk edit feature (LONESTONEP-5), which went from 19 changed upstream files to 7.
+
+#### Principle: adapt the fork to upstream, not the other way round
+
+When a feature would require changing upstream signatures, shrink the feature rather than the upstream code. Bulk edit first reported a result per work item ("48 updated, 2 skipped"). The upstream store returns `Promise<void>` from eight interfaces, so this meant changing nine core files. The API was made all or nothing instead, which fits the upstream store as it is. The dropped design is noted under the feature in `FORK_CHANGELOG.md`.
+
+#### When upstream code must change
+
+1. **Swap only the paid placeholder, keep upstream logic.** `core/components/issues/bulk-operations/root.tsx` renders the fork bar instead of the "Upgrade" banner. Its display rule and every call site stay upstream's.
+2. **Re-export from `oe/`.** `core/hooks/use-bulk-operation-status.ts` is one line that re-exports the fork hook; the logic lives in `oe/hooks/`.
+3. **Change the value, not the signature.** The issue service only got a new URL; its upstream return type was kept.
+4. **One line per file when possible.** Board selection is wired with one import and one rendered component in each of two kanban files.
+5. **Translations: append, never edit.** New keys go at the end of the existing namespace; upstream keys stay untouched.
+
+#### How to avoid changing upstream code
+
+6. **Reuse public upstream methods from `oe/`.** Bulk edit updates the store through `updateIssue(..., shouldSync = false)` (upstream's local update, which also regroups work items), `removeIssueFromList`, `fetchCycleDetails`, `fetchModuleDetails` and `IssueService.retrieveIssues`, with no store change.
+7. **Prefer optimistic updates over refetching the view.** Update the store first, the way upstream does in `issueUpdate`, then call the API and revert the change if it fails. Read the saved data back in the background if the server may compute more. Bulk edit keeps the open menu, the scroll position and the loaded pages this way, where a refetch of the view would clear the list. Keep the update all or nothing on the API side so that the revert is exact.
+8. **Check what an upstream method does on screen before relying on it.** `fetchIssuesWithExistingPagination` clears the list before refetching: the loader replaces the list, open menus close and the pagination resets. The e2e tests caught it.
+9. **Keep fork-only types in `oe/`.** Widening the shared `TBulkOperationsPayload` in `packages/types` broke upstream code that indexes work items with its keys (TS7053). The removal keys now live in `oe/components/issues/bulk-operations/types.ts`.
+10. **Copy a rendering into `oe/` rather than exporting or editing a core component**, and note what to re-check when upstream restyles it (`oe/components/issues/bulk-operations/dropdown-options.tsx`).
+11. **Isolate an unavoidable workaround in `oe/` and explain it.** The store interfaces leave out `shouldSync`, so `oe/` calls `updateIssue` through a typed cast (`TLocalIssueUpdate`) whose comment says what to re-check on upstream merges.
+12. **Backend: everything in `plane.extended`**, as described in "Backend: adding a new feature" above.
+
+#### Keeping the pull request clean
+
+13. **No formatting or lint-only changes in upstream files.** Restore any upstream file whose only change is a comment, a reformat or a reordered import.
+14. **Move unrelated fixes to their own branch**, even small ones found along the way.
+15. **Track it in [`FORK_CHANGELOG.md`](../../FORK_CHANGELOG.md)**, in the same commit: every upstream file the feature modifies, adds or deletes, the upstream code it copies or relies on, and an entry in "Features not in Plane" if it is an exception. The pre-commit hook blocks an unlisted upstream file, and `node tools/check-fork-changelog.mjs` audits the whole fork; the rules are in "The fork changelog" below.
+16. **Document what was dropped and why**, in one sentence under the feature in `FORK_CHANGELOG.md`, so that a later change can bring it back knowingly.
+
+#### Checklist before opening a pull request
+
+- [ ] The feature started with `/start-feature`, and the Plane feature check verdict (Plane equivalent and plan, or the "Features not in Plane" entry) is in the pull request description.
+- [ ] Every upstream file in the diff is required; every upstream file is listed in `FORK_CHANGELOG.md`, and every copy or use of upstream internals in its "Upstream dependencies" (`node tools/check-fork-changelog.mjs` passes).
+- [ ] No upstream signature, shared type or translation key was changed.
+- [ ] No formatting, lint-only or unrelated change in upstream files.
+- [ ] The store is updated optimistically (and reverted on error) rather than by refetching the view.
+- [ ] Workarounds that depend on upstream internals are commented with what to re-check.
+
+### The fork changelog
+
+[`FORK_CHANGELOG.md`](../../FORK_CHANGELOG.md), at the repository root, is the registry of what the fork changes in upstream code and relies on from it. It contains:
+
+- **Upstream sync**: the last upstream commit merged and reviewed ("Last upstream sync", at the top).
+- **Features**: every fork feature and its Plane equivalent.
+- **Upstream files touched**: every upstream file the fork modifies, adds or deletes, grouped by feature.
+- **Known gaps with the conventions**: listed under a feature's files when its code predates the rules in `AGENTS.md`; each one is to be fixed in a dedicated pull request. Do not take that code as a model.
+- **Upstream dependencies**: upstream code the fork relies on without changing it (copied rendering, internal methods, task payloads). Nothing breaks at build time when upstream changes it.
+- **Features not in Plane**: the exceptions to the project direction, which is to build only features that Plane offers (see the `plane-feature-check` skill).
+
+"Upstream files" are all files outside the fork folders: `apps/web/oe/`, `apps/api/plane/extended/`, `docs/architecture/`, `tools/`, `deployments/lonestone/`, `docker-compose.lonestone.yml`, `.claude/skills/start-feature/`, `.claude/skills/plane-feature-check/` and `FORK_CHANGELOG.md` (`FORK_OWNED` in `tools/check-fork-changelog.mjs`).
+
+#### Rules
+
+- A commit that modifies, adds or deletes an upstream file adds its row to "Upstream files touched" in the same commit. The pre-commit hook blocks the commit otherwise (`tools/check-fork-changelog.mjs --staged`).
+- Rows are grouped by feature, one sub-section per feature in the order of the "Features" table. A new feature adds its row to "Features" and its own sub-sections at the end. A file touched by two features appears under both.
+- When a file goes back to its upstream content, remove its row.
+- Fork code that copies upstream code or calls upstream internals adds a row to "Upstream dependencies", in the same commit.
+- Before a pull request, run the audit. It compares the tracked and staged files with upstream (untracked files are ignored until staged) and fails on missing or stale rows:
+
+  ```sh
+  git fetch upstream preview
+  node tools/check-fork-changelog.mjs
+  ```
+
+- A feature that Plane does not offer gets an entry in "Features not in Plane", written as part of the feature.
+
+#### Merging upstream
+
+1. `git fetch upstream preview`, then run the audit. Its warning lists the files of "Upstream files touched" and "Upstream dependencies" that upstream changed since the last sync.
+2. Merge `upstream/preview`. For each listed file, re-check the fork change or the fork code that relies on it (the "Change" and "What the fork relies on" columns say what to look for).
+3. Run the audit again: fix missing or stale rows, update the paths of files that upstream moved. Run the tests.
+4. Set "Last upstream sync" to the merged upstream commit, in the same pull request.
+
+#### Entry for a feature not in Plane
+
+```md
+### <Feature name> (<work item ID>, PR #<number>)
+
+- **Decided by / on**: <who>, <date>
+- **Why it is built anyway**: <the need, and why the closest Plane feature does not meet it>
+- **Closest Plane feature**: <name and plan, or "none">
+- **Upstream files touched**: <list, also in "Upstream files touched">
+- **Risk on upstream merges**: <what could clash if Plane ships something similar>
+```
+
 ---
 
 ## The Hard Problems
