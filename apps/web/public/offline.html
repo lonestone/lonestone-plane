@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#fff" />
+    <title>Plane | Offline</title>
+    <style>
+      /* Written by hand: offline, the app's CSS is not loaded. Close to the app's light and dark themes
+         (packages/tailwind-config); the accent is Plane's primary, #3f76ff (core/components/core/theme/custom-theme-selector.tsx). */
+      :root {
+        color-scheme: light dark;
+        --bg: #ffffff;
+        --text: #1d1f20;
+        --muted: #646464;
+        --accent: #3f76ff;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #191919;
+          --text: #ededed;
+          --muted: #a0a0a0;
+        }
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        box-sizing: border-box;
+        background: var(--bg);
+        color: var(--text);
+        font-family:
+          system-ui,
+          -apple-system,
+          sans-serif;
+        text-align: center;
+      }
+      h1 {
+        font-size: 1.25rem;
+        margin: 0 0 8px;
+      }
+      p {
+        color: var(--muted);
+        margin: 0 0 24px;
+      }
+      button {
+        border: 0;
+        border-radius: 6px;
+        padding: 10px 20px;
+        background: var(--accent);
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>You are offline</h1>
+      <p>Plane needs a network connection. Check your connection and try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+    </main>
+    <script>
+      // the app's translations are not available offline: French or English, from the browser language
+      if (navigator.language.toLowerCase().startsWith("fr")) {
+        document.documentElement.lang = "fr";
+        document.title = "Plane | Hors ligne";
+        document.querySelector("h1").textContent = "Vous êtes hors ligne";
+        document.querySelector("p").textContent =
+          "Plane a besoin d'une connexion réseau. Vérifiez votre connexion et réessayez.";
+        document.querySelector("button").textContent = "Réessayer";
+      }
+    </script>
+  </body>
+</html>

@@ -9,8 +9,10 @@ import { hydrateRoot } from "react-dom/client";
 import { HydratedRouter } from "react-router/dom";
 
 import polyfills from "@/lib/polyfills";
+import { registerServiceWorker } from "@/plane-web/lib/pwa/register-service-worker";
 
 void polyfills;
+registerServiceWorker();
 
 startTransition(() => {
   hydrateRoot(
