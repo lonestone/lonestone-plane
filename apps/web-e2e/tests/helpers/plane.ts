@@ -26,6 +26,7 @@ export type PlaneSession = {
 export type TState = { id: string; name: string; group: string };
 export type TWorkItem = {
   id: string;
+  sequence_id: number;
   name: string;
   state_id: string;
   priority: string;
@@ -256,4 +257,20 @@ export async function listProjects(
   workspaceSlug: string
 ): Promise<{ id: string; name: string }[]> {
   return call(session, "GET", `/api/workspaces/${workspaceSlug}/projects/`);
+}
+
+export type TAttachment = { id: string; attributes: { name: string; type: string; size: number } };
+
+/** Attachments of a work item whose upload completed (the API lists only those). */
+export async function listAttachments(
+  session: PlaneSession,
+  workspaceSlug: string,
+  projectId: string,
+  workItemId: string
+): Promise<TAttachment[]> {
+  return call(
+    session,
+    "GET",
+    `/api/assets/v2/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/attachments/`
+  );
 }

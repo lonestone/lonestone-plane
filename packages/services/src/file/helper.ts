@@ -81,6 +81,11 @@ const detectMimeTypeFromSignature = async (file: File): Promise<string> => {
   }
 };
 
+// Lonestone fork (LONESTONEP-9): an OLE or ZIP signature does not tell which document the container
+// holds (.doc and .xls read as application/x-cfb, .xlsx read on 4KB as application/zip), and text
+// files such as .csv have no signature: the API rejected them. Drop when upstream fixes the detection.
+const GENERIC_CONTAINER_MIME_TYPES = new Set(["application/x-cfb", "application/zip"]);
+
 /**
  * @description Validate and detect the MIME type of a file using signature detection
  * Also performs basic security checks on filename
@@ -96,9 +101,11 @@ const validateAndDetectFileType = async (file: File): Promise<string> => {
 
   try {
     const signatureType = await detectMimeTypeFromSignature(file);
-    if (signatureType) {
+    if (signatureType && !GENERIC_CONTAINER_MIME_TYPES.has(signatureType)) {
       return signatureType;
     }
+    // generic container or unknown signature: the browser's type, read from the extension
+    return file.type || signatureType;
   } catch (_error) {
     console.warn("Error detecting file type from signature:", _error);
   }
