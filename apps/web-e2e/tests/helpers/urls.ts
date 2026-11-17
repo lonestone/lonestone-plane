@@ -30,3 +30,7 @@ export function workItemUrl(workspaceSlug: string, sequenceId: number): string {
 export function projectMembersSettingsUrl(workspaceSlug: string, projectId: string): string {
   return `${WEB_URL}/${workspaceSlug}/settings/projects/${projectId}/members/`;
 }
+
+export function inboxUrl(workspaceSlug: string): string {
+  return `/${workspaceSlug}/notifications/`;
+}
