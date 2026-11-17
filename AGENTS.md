@@ -33,6 +33,15 @@ Upstream code is everything outside the fork folders: `apps/web/core/`, `apps/we
 
 Details, examples and pitfalls: "Keeping upstream changes minimal" in `docs/architecture/fork-maintenance.md`.
 
+### Tests
+
+- **Backend**: unit and contract tests are required for fork code, in `apps/api/plane/tests/unit/extended/` and `apps/api/plane/tests/contract/app/`. Conventions: `apps/api/plane/tests/TESTING_GUIDE.md` (the "Backend tests" section below points to `apps/api/tests/`, which only has `RUNNING_TESTS.md`).
+- **Frontend**: `apps/web` has no unit test framework, and a fork feature does not add one. Cover the user paths end to end with Playwright in `apps/web-e2e/`: `pnpm --filter=web-e2e test:e2e`, against a throwaway stack.
+- **E2E**: locate elements by role and accessible name, never with a `data-testid` added to an upstream file. Each test creates its own data. A flaky test is fixed or deleted.
+- Delete the tests of a dropped behaviour; do not skip them.
+
+Details: "Testing" in `docs/architecture/fork-maintenance.md`.
+
 ## Code Style
 
 - **Imports**: Use `workspace:*` for internal packages, `catalog:` for external deps
