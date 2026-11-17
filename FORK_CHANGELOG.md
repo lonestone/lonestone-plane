@@ -19,6 +19,7 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 | Assign work items to guests (LONESTONEP-4) | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: Commenter role (Pro and above), custom roles (Enterprise)                                                                                                                                                              |
 | Project subscribers (LONESTONEP-8)         | (to be opened) | Project subscribers (Enterprise Grid). Gaps: project admins are subscribers by default and can remove themselves, and the admins of the release are told once in a dialog (decided by Tatiana Grange on 2026-11-12); new work items are notified and emailed with a fork template |
 | Inbox navigation (LONESTONEP-7)            | (to be opened) | App Rail (Cloud, commercial self-hosted). Shipped in CE but disabled (`AppRailVisibilityProvider`, `isEnabled = false`)                                                                                                                                                           |
+| Installable PWA (LONESTONEP-3)             | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: native iOS and Android apps (Cloud, commercial self-hosted)                                                                                                                                                            |
 
 ## Upstream files touched
 
@@ -212,6 +213,17 @@ Left out on purpose: `apps/web/core/components/dropdowns/member/member-options.t
 | ----------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `apps/web/app/(all)/[workspaceSlug]/layout.tsx` | Modified | `<AppRailVisibilityProvider isEnabled>`. Why: the inbox replaces the sidebar and nothing obvious leads back home; upstream's App Rail ("Projects", "Settings") is shipped in CE but disabled (`isEnabled = false` by default) |
 
+### Installable PWA (LONESTONEP-3)
+
+| File                                              | Status   | Change                                                                                                                                                                        |
+| ------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web/app/entry.client.tsx`                   | Modified | Imports and calls `registerServiceWorker` from `@/plane-web/lib/pwa/register-service-worker`, which registers `pwa-sw.js`                                                     |
+| `apps/web/public/icons/icon-maskable-512x512.png` | Added    | Maskable icon: the 512 icon flattened on its background, logo inside the safe zone, so Android can crop it to its mask                                                        |
+| `apps/web/public/offline.html`                    | Added    | Page shown without network, in French or English from the browser language                                                                                                    |
+| `apps/web/public/pwa-sw.js`                       | Added    | Service worker: pages from the network, `offline.html` when it fails; caches nothing else                                                                                     |
+| `apps/web/public/site.webmanifest.json`           | Modified | Icons: `icons/icon-192x192.png` and `icon-512x512.png` instead of one image for both sizes, plus the maskable 512 icon. Browsers use this manifest: `root.tsx` links it first |
+| `packages/constants/src/metadata.ts`              | Modified | `SITE_NAME` is `"Plane"`: its only use is `apple-mobile-web-app-title` in `root.tsx`, the name iOS gives the home screen icon (it was the long site title)                    |
+
 ## Upstream dependencies
 
 Upstream files the fork relies on without changing them. Only the LONESTONEP-5 features are inventoried so far; the dependencies of the earlier features are still to be listed.
@@ -305,6 +317,14 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------- |
 | `apps/web/core/lib/app-rail/provider.tsx`, `core/components/navigation/app-rail-root.tsx`, `app-rail-hoc.tsx`, `core/components/workspace/content-wrapper.tsx` | `isEnabled` turns the App Rail on, the user can still undock it (`APP_RAIL_<slug>` in local storage); its "Projects" link goes to `/<workspace>/`, labelled by default (`icon_with_label`) | `apps/web-e2e/tests/inbox-navigation.spec.ts` |
 
+### Installable PWA (LONESTONEP-3)
+
+| Upstream file                                                                    | What the fork relies on                                                                                                                                                                                                                                                                                                | Fork code                        |
+| -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- |
+| `apps/web/public/icons/icon-192x192.png`, `icon-348x348.png`, `icon-512x512.png` | The icons declared in `site.webmanifest.json` (and `manifest.json`); `icon-maskable-512x512.png` is made from `icon-512x512.png`                                                                                                                                                                                       | `apps/web-e2e/tests/pwa.spec.ts` |
+| `apps/web/public/sw.js`, `apps/web/public/workbox-*.js`                          | The old next-pwa worker, left in place. A browser that kept it gets it replaced by `pwa-sw.js` (same scope `/`) once the old worker has no request in flight, at the latest on the next load; `activate` drops its caches. Not covered by e2e: under the dev server the old worker can hold a reload for over a minute | `apps/web/public/pwa-sw.js`      |
+| `apps/web/app/root.tsx`                                                          | Links `site.webmanifest.json` before `manifest.json` (browsers use the first manifest link); the PWA meta tags, `apple-mobile-web-app-title` from `SITE_NAME`, and the `apple-touch-icon` links                                                                                                                        | `apps/web-e2e/tests/pwa.spec.ts` |
+
 ## Features not in Plane
 
 ### Guest collaboration
@@ -321,3 +341,11 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 - **Decided by**: Loïc Vanderschooten, on 2026-11-10.
 - **Upstream files**: `apps/api/plane/app/serializers/issue.py`, `apps/api/plane/app/serializers/draft.py`, `apps/web/core/components/dropdowns/member/dropdown.tsx`, `apps/web/core/components/issues/issue-layouts/utils.tsx`, `apps/web/core/components/power-k/ui/pages/context-based/work-item/root.tsx`, and keys appended to `packages/i18n/src/locales/{en,fr}/work-item.json` (details under "Upstream files touched").
 - **Gap with the ticket**: Plane keeps "Your work" to workspace admins and members, so an assigned guest finds the work item in the project's views, not in "Your work".
+
+### Installable PWA (LONESTONEP-3)
+
+- **Not in Plane**: no plan offers a PWA (plane.so/pricing lists neither PWA, mobile nor offline). Plane serves phones with native iOS and Android apps, which only work with Plane Cloud and the commercial self-hosted edition (docs.plane.so/devices/mobile). Upstream still ships PWA leftovers: two web manifests and PWA meta tags in `apps/web/app/root.tsx`, and an old next-pwa `sw.js` that nothing registers.
+- **Why built anyway**: the native apps do not work with our Community Edition, so the browser is the only way to use Plane on a phone. Installing it from the browser, full screen, mostly reuses what upstream already ships. Offline use is out of scope (LONESTONEP-13).
+- **Decided by**: Tatiana Grange, on 2026-11-17.
+- **Risk on upstream merges**: if Plane ships its own PWA again, it would clash on `site.webmanifest.json`, `metadata.ts` (`SITE_NAME`) and `entry.client.tsx`, and two service workers would compete for the scope `/`: keep only one. Upstream already changed the icons of `site.webmanifest.json` (to `icons/icon-192x192.png` and `icon-512x512.png`, as here): expect a small conflict there. If upstream reorders or drops the manifest links in `root.tsx`, re-check which manifest browsers use.
+- **Upstream files**: `apps/web/app/entry.client.tsx` (two lines), `packages/constants/src/metadata.ts` (one line), `apps/web/public/site.webmanifest.json` (icons), and three added files in `apps/web/public/` (details under "Upstream files touched"). `root.tsx`, `manifest.json`, the old next-pwa `sw.js` and `workbox-*.js` stay as they are.
