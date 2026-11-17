@@ -18,6 +18,7 @@ import { SettingsHeading } from "@/components/settings/heading";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useUserPermissions } from "@/hooks/store/user";
+import { ProjectSubscribers } from "@/plane-web/components/projects/subscribers";
 // local imports
 import type { Route } from "./+types/page";
 import { MembersProjectSettingsHeader } from "./header";
@@ -48,6 +49,7 @@ function MembersSettingsPage({ params }: Route.ComponentProps) {
       <PageHead title={pageTitle} />
       <SettingsHeading title={t("common.members")} />
       <ProjectSettingsMemberDefaults projectId={projectId} workspaceSlug={workspaceSlug} />
+      <ProjectSubscribers projectId={projectId} workspaceSlug={workspaceSlug} />
       <ProjectMemberList projectId={projectId} workspaceSlug={workspaceSlug} />
     </SettingsContentWrapper>
   );

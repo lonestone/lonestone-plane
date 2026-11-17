@@ -26,3 +26,7 @@ export function cycleIssuesUrl(workspaceSlug: string, projectId: string, cycleId
 export function workItemUrl(workspaceSlug: string, sequenceId: number): string {
   return `/${workspaceSlug}/browse/BULK-${sequenceId}/`;
 }
+
+export function projectMembersSettingsUrl(workspaceSlug: string, projectId: string): string {
+  return `${WEB_URL}/${workspaceSlug}/settings/projects/${projectId}/members/`;
+}

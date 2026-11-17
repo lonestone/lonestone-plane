@@ -9,3 +9,6 @@ class ExtendedConfig(AppConfig):
     name = "plane.extended"
     label = "extended"
     verbose_name = "Extended"
+
+    def ready(self):
+        from plane.extended import signals  # noqa: F401  (connects the receivers)

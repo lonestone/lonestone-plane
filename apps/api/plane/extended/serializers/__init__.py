@@ -4,6 +4,7 @@
 
 from .guest_collaboration import ProjectGuestCollaborationSerializer
 from .issue_bulk_update import BulkUpdateValidationError, IssueBulkUpdateSerializer
+from .project_subscriber import ProjectSubscriberSerializer
 from .project_template import (
     ProjectTemplateDataSerializer,
     ProjectTemplateSerializer,
@@ -17,4 +18,5 @@ __all__ = (
     "ProjectGuestCollaborationSerializer",
     "IssueBulkUpdateSerializer",
     "BulkUpdateValidationError",
+    "ProjectSubscriberSerializer",
 )

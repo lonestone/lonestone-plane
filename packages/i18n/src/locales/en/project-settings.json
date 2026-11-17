@@ -521,6 +521,23 @@
           }
         }
       }
+    },
+    "subscribers": {
+      "title": "Project subscribers",
+      "description": "Subscribers follow every work item of this project: they get a notification, and an email per their notification settings, for each new work item and each change. Project admins are subscribers by default and can remove themselves.",
+      "description_read_only": "Project admins are subscribers by default, and choose who else follows every work item of this project.",
+      "placeholder": "Add subscribers",
+      "empty": "No project subscribers yet.",
+      "add_error": "Couldn't add the subscriber.",
+      "remove_error": "Couldn't remove the subscriber.",
+      "announcement": {
+        "title": "You now follow your projects' new work items",
+        "projects": "You are an admin of these projects:",
+        "body": "From now on, you get a notification, and an email per your notification settings, for every new work item created in them.",
+        "how_to": "To stop, open the project's settings → Members → Project subscribers, and uncheck yourself (\"You\"):",
+        "image_alt": "The Project subscribers picker, with \"You\" checked",
+        "got_it": "Got it"
+      }
     }
   }
 }

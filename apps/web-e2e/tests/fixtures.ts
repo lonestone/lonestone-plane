@@ -4,15 +4,18 @@
  * See the LICENSE file for details.
  */
 
+import type { Browser, BrowserContext } from "@playwright/test";
 import { test as base } from "@playwright/test";
 import type { PlaneSession, TState, TWorkItem } from "./helpers/plane";
 import { API_URL } from "./helpers/urls";
 import {
+  addProjectMember,
   createProject,
   createWorkItem,
   createWorkspace,
   getStates,
   getWorkItem,
+  ROLE,
   signUpFreshUser,
 } from "./helpers/plane";
 
@@ -64,4 +67,24 @@ export async function createWorkItems(project: ProjectFixture, items: (string | 
 /** Reads a work item back from the API. */
 export async function fetchWorkItem(project: ProjectFixture, item: TWorkItem): Promise<TWorkItem> {
   return getWorkItem(project.session, project.workspaceSlug, project.projectId, item.id);
+}
+
+/**
+ * Adds a freshly signed-up user to the fixture project (member by default), logged in in their own
+ * browser context: open their pages with `context.newPage()`, and close the context at the end.
+ */
+export async function addMemberWithContext(
+  browser: Browser,
+  project: ProjectFixture,
+  role: (typeof ROLE)[keyof typeof ROLE] = ROLE.member
+): Promise<{ member: Awaited<ReturnType<typeof addProjectMember>>; context: BrowserContext }> {
+  const context = await browser.newContext();
+  const member = await addProjectMember(
+    project.session,
+    context.request,
+    project.workspaceSlug,
+    project.projectId,
+    role
+  );
+  return { member, context };
 }
