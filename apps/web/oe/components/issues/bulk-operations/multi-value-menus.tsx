@@ -8,6 +8,7 @@ import { useCallback } from "react";
 import { observer } from "mobx-react";
 import { useParams } from "react-router";
 import { useTranslation } from "@plane/i18n";
+import { guestsAreAssignable, useGuestUserDetails } from "@/plane-web/components/issues/guest-assignment";
 import type { TIssue } from "@plane/types";
 import { useIssues } from "@/hooks/store/use-issues";
 import { useLabel } from "@/hooks/store/use-label";
@@ -52,9 +53,11 @@ export const BulkAssigneesMenu = observer(function BulkAssigneesMenu(props: TBul
   } = useMember();
   const { getCount, selectedCount } = useSelectionValueCount("assignee_ids");
 
-  // members only (no guests): the same list as the assignee dropdown
-  const memberIds = getProjectMemberIds(projectId, false);
-  const options = useMemberOptions(memberIds ?? undefined, getUserDetails);
+  // members, plus guests once they can be assigned (LONESTONEP-4): the bulk bar has no Guest access
+  // dialog, so guests that cannot see the work items yet are left out
+  const memberIds = getProjectMemberIds(projectId, guestsAreAssignable(projectId));
+  const guestUserDetails = useGuestUserDetails(projectId, getUserDetails);
+  const options = useMemberOptions(memberIds ?? undefined, guestUserDetails);
 
   return (
     <BulkTriStateMenu

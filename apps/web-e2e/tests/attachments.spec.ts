@@ -7,6 +7,7 @@
 import type { Page } from "@playwright/test";
 import { createWorkItems, expect, test } from "./fixtures";
 import { listAttachments } from "./helpers/plane";
+import { workItemUrl } from "./helpers/urls";
 
 type TUploadFile = { name: string; mimeType: string; buffer: Buffer };
 
@@ -39,7 +40,7 @@ async function attach(page: Page, file: TUploadFile): Promise<void> {
 
 test("attaches Office, CSV and PDF files to a work item", async ({ page, project }) => {
   const [workItem] = await createWorkItems(project, ["Attachments"]);
-  await page.goto(`/${project.workspaceSlug}/browse/BULK-${workItem.sequence_id}/`);
+  await page.goto(workItemUrl(project.workspaceSlug, workItem.sequence_id));
   await expect(page.getByRole("button", { name: "Attach", exact: true })).toBeVisible();
 
   // the browser types .doc, .xls, .xlsx and .csv from their extension; the API only accepts those types

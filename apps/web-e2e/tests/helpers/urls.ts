@@ -21,3 +21,8 @@ export function moduleIssuesUrl(workspaceSlug: string, projectId: string, module
 export function cycleIssuesUrl(workspaceSlug: string, projectId: string, cycleId: string): string {
   return `/${workspaceSlug}/projects/${projectId}/cycles/${cycleId}`;
 }
+
+/** Page of a work item of the fixture project, whose identifier is "BULK" (helpers/plane.ts, createProject). */
+export function workItemUrl(workspaceSlug: string, sequenceId: number): string {
+  return `/${workspaceSlug}/browse/BULK-${sequenceId}/`;
+}

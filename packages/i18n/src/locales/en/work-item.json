@@ -342,6 +342,13 @@
     "failure_reasons": {
       "not_found": "Some work items are no longer available.",
       "invalid_date_range": "The start date would be after the due date for some work items."
+    },
+    "guest_assignment": {
+      "badge": "Guest",
+      "modal_title": "This guest can't see the work item yet",
+      "modal_body": "Guests only see the work items they created while Guest access is off. Turn on Guest access to let guests see every work item of this project, then assign them.",
+      "modal_body_member": "Ask a project admin to turn on Guest access in the project settings.",
+      "enable_and_assign": "Turn on Guest access and assign"
     }
   },
   "recurring_work_items": {
