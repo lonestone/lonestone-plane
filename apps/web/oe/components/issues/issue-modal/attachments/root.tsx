@@ -32,7 +32,8 @@ const useDescriptionFrame = (enabled: boolean) => {
   useEffect(() => {
     if (!enabled) return;
     const lookUp = () => {
-      const found = document.querySelector(DESCRIPTION_FRAME_SELECTOR)?.parentElement ?? null;
+      // the newest modal, when one opens over another
+      const found = [...document.querySelectorAll(DESCRIPTION_FRAME_SELECTOR)].at(-1)?.parentElement ?? null;
       setFrame((current) => (current === found ? current : found));
     };
     lookUp();
@@ -58,9 +59,13 @@ export const IssueModalAttachments = observer(function IssueModalAttachments(pro
 
   // A new list when a modal opens, not emptied when it closes: upstream may close the modal before the upload
   // reads the files (`draft-issue-layout.tsx` saving a draft).
+  const [generation, setGeneration] = useState<number | null>(null);
   useEffect(() => {
     modalAttachments.open();
+    setGeneration(modalAttachments.generation);
   }, [modalAttachments]);
+  // a modal opened over this one owns the list
+  const isCurrentModal = generation !== null && generation === modalAttachments.generation;
 
   const addFiles = useCallback(
     (selected: File[]) => {
@@ -73,9 +78,9 @@ export const IssueModalAttachments = observer(function IssueModalAttachments(pro
         });
         return false;
       });
-      if (accepted.length > 0) modalAttachments.add(accepted);
+      if (accepted.length > 0 && isCurrentModal) modalAttachments.add(accepted);
     },
-    [maxFileSize, modalAttachments, t]
+    [isCurrentModal, maxFileSize, modalAttachments, t]
   );
 
   // the drag listeners stay for the whole modal: they read the latest `addFiles` (`t` changes between renders)
@@ -145,7 +150,7 @@ export const IssueModalAttachments = observer(function IssueModalAttachments(pro
     input.click();
   };
 
-  if (isDraft || !frame) return null;
+  if (isDraft || !frame || !isCurrentModal) return null;
 
   return createPortal(
     <>
@@ -159,7 +164,7 @@ export const IssueModalAttachments = observer(function IssueModalAttachments(pro
               type="button"
               aria-label={t("issue.modal_attachments.remove", { name: file.name })}
               className="ml-auto flex-shrink-0 rounded-sm p-0.5 text-tertiary hover:bg-layer-1-hover hover:text-primary"
-              onClick={() => modalAttachments.remove(id)}
+              onClick={() => modalAttachments.remove([id])}
             >
               <X className="size-3.5" />
             </button>

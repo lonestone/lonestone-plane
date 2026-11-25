@@ -6,11 +6,12 @@
 
 import { writeFileSync } from "node:fs";
 import type { Locator, Page } from "@playwright/test";
-import { createWorkItems, expect, test } from "./fixtures";
+import { createWorkItems, expect, fetchWorkItem, test } from "./fixtures";
 import type { ProjectFixture } from "./fixtures";
+import type { TWorkItem } from "./helpers/plane";
 import type { TUploadFile } from "./helpers/files";
 import { pdfFile, pngFile } from "./helpers/files";
-import { getWorkItem, listAttachments, listProjectWorkItems } from "./helpers/plane";
+import { listAttachments, listProjectWorkItems } from "./helpers/plane";
 import { draftsUrl, projectIssuesUrl, workItemUrl } from "./helpers/urls";
 import { workItem } from "./helpers/ui";
 
@@ -56,9 +57,25 @@ async function dragFiles(page: Page, target: Locator, files: TUploadFile[]): Pro
 }
 
 /** The work item the modal created: the only one of the fresh project. */
-async function createdWorkItemId(project: ProjectFixture): Promise<string> {
+async function createdWorkItem(project: ProjectFixture): Promise<TWorkItem> {
   const [created] = await listProjectWorkItems(project.session, project.workspaceSlug, project.projectId);
-  return created.id;
+  return created;
+}
+
+async function createdWorkItemId(project: ProjectFixture): Promise<string> {
+  return (await createdWorkItem(project)).id;
+}
+
+/** Delays the creation of work items, as on a slow network; `failFirst` makes the first one fail. */
+async function slowWorkItemCreation(page: Page, { failFirst = false } = {}): Promise<void> {
+  let calls = 0;
+  await page.route("**/issues/", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    if (failFirst && calls === 1) return route.fulfill({ status: 500, json: { error: "Unavailable" } });
+    return route.fallback();
+  });
 }
 
 /** Saves and waits for upstream's success toast, shown once the attachments are sent. */
@@ -114,10 +131,9 @@ test("a file dragged anywhere over the modal is added to its attachments", async
   await saveAndWait(page, dialog, "Save", "Work item created successfully");
   await page.goto(workItemUrl(project.workspaceSlug, 1));
   await expect(page.getByText("budget.pdf", { exact: true })).toBeVisible({ timeout: 30_000 });
-  const createdId = await createdWorkItemId(project);
-  expect(await attachmentNames(project, createdId)).toEqual(["budget.pdf", "chart.png"]);
+  const created = await fetchWorkItem(project, await createdWorkItem(project));
+  expect(await attachmentNames(project, created.id)).toEqual(["budget.pdf", "chart.png"]);
   // the image went to the attachments, not into the description
-  const created = await getWorkItem(project.session, project.workspaceSlug, project.projectId, createdId);
   expect(created.description_html ?? "").not.toContain("<image-component");
 });
 
@@ -125,6 +141,7 @@ test("attaches a file while editing a work item", async ({ page, project }) => {
   const [item] = await createWorkItems(project, ["Notes"]);
   await page.goto(projectIssuesUrl(project.workspaceSlug, project.projectId));
   await workItem(page, item.id).hover();
+  // the row's quick actions: its last button, without accessible name (listed under "Upstream dependencies")
   await workItem(page, item.id).getByRole("button").last().click();
   await page.getByRole("menuitem", { name: "Edit" }).click();
   const dialog = workItemModal(page);
@@ -142,7 +159,8 @@ test("a draft has no attachments", async ({ page, project }) => {
   const dialog = workItemModal(page);
   // the description editor (a contenteditable without accessible name) is where the list would show
   await expect(dialog.locator('[contenteditable="true"]')).toBeVisible();
-  // the list shows within a render of the editor: give it that time before checking it is absent
+  // The list would show a render after the editor: a check for absence right away would pass even if drafts
+  // showed it. Waiting is the only way to check that something does not appear.
   await page.waitForTimeout(500);
   await expect(dialog.getByRole("button", { name: "Attach file", exact: true })).toHaveCount(0);
 });
@@ -194,25 +212,80 @@ test("with Create more, the modal stays open and its list is emptied", async ({ 
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
 
-  // the modal is open again, emptied for the next work item
   await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue("");
   await expect(dialog.getByText("first.pdf", { exact: true })).toHaveCount(0);
   expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["first.pdf"]);
 });
 
-test("a file added while the work item saves is not sent with it", async ({ page, project }) => {
-  // the work item takes a while to be created, as on a slow network
-  await page.route("**/issues/", async (route) => {
-    if (route.request().method() === "POST") await new Promise((resolve) => setTimeout(resolve, 3000));
-    await route.fallback();
-  });
+test("a file added while the work item saves stays for the next one", async ({ page, project }) => {
+  await slowWorkItemCreation(page);
   const dialog = await openCreateModal(page, project);
   await dialog.getByRole("textbox", { name: "Title" }).fill("Saved first");
   await attachWithButton(page, dialog, [pdfFile("saved.pdf")]);
+  await dialog.getByText("Create more", { exact: true }).click();
   await dialog.getByRole("button", { name: "Save", exact: true }).click();
-  // still saving: a file added now belongs to whatever comes next, not to this work item
   await attachWithButton(page, dialog, [pdfFile("late.pdf")]);
-  await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(dialog.getByText("late.pdf", { exact: true })).toBeVisible();
+  // the work item is not created yet: late.pdf was added while it saves
+  expect(await listProjectWorkItems(project.session, project.workspaceSlug, project.projectId)).toHaveLength(0);
 
+  await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
   expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["saved.pdf"]);
+  await expect(dialog.getByText("late.pdf", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("saved.pdf", { exact: true })).toHaveCount(0);
+});
+
+test("a file removed while the work item saves is not sent", async ({ page, project }) => {
+  await slowWorkItemCreation(page);
+  const dialog = await openCreateModal(page, project);
+  await dialog.getByRole("textbox", { name: "Title" }).fill("Second thoughts");
+  await attachWithButton(page, dialog, [pdfFile("keep.pdf"), pdfFile("drop.pdf")]);
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.getByRole("button", { name: "Remove drop.pdf" }).click();
+  expect(await listProjectWorkItems(project.session, project.workspaceSlug, project.projectId)).toHaveLength(0);
+
+  await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
+  expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["keep.pdf"]);
+});
+
+test("after a failed save, saving again sends the files listed then", async ({ page, project }) => {
+  await slowWorkItemCreation(page, { failFirst: true });
+  const dialog = await openCreateModal(page, project);
+  await dialog.getByRole("textbox", { name: "Title" }).fill("Retried");
+  await attachWithButton(page, dialog, [pdfFile("first-try.pdf")]);
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Unavailable", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  await attachWithButton(page, dialog, [pdfFile("second-try.pdf")]);
+  await saveAndWait(page, dialog, "Save", "Work item created successfully");
+  expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["first-try.pdf", "second-try.pdf"]);
+});
+
+test("a modal closed while its work item saves keeps its files apart from the next modal", async ({
+  page,
+  project,
+}) => {
+  await slowWorkItemCreation(page);
+  const first = await openCreateModal(page, project);
+  await first.getByRole("textbox", { name: "Title" }).fill("Closed early");
+  await attachWithButton(page, first, [pdfFile("first.pdf")]);
+  await first.getByRole("button", { name: "Save", exact: true }).click();
+  // closed while saving, without keeping a draft
+  await first.getByRole("button", { name: "Discard", exact: true }).click();
+  const saveDraft = page.getByRole("dialog").filter({ hasText: "Save this draft?" });
+  if (await saveDraft.isVisible()) await saveDraft.getByRole("button", { name: "Discard", exact: true }).click();
+  await expect(first).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Add work item" }).first().click();
+  const next = workItemModal(page);
+  await attachWithButton(page, next, [pdfFile("next.pdf")]);
+  await expect(next.getByText("next.pdf", { exact: true })).toBeVisible();
+
+  await expect
+    .poll(async () => (await listProjectWorkItems(project.session, project.workspaceSlug, project.projectId)).length, {
+      timeout: 15_000,
+    })
+    .toBe(1);
+  await expect.poll(async () => attachmentNames(project, await createdWorkItemId(project))).toEqual(["first.pdf"]);
+  await expect(next.getByText("next.pdf", { exact: true })).toBeVisible();
 });

@@ -20,7 +20,6 @@ import type { TPendingAttachment } from "@/plane-web/store/modal-attachments.sto
  * - `handlePropertyValuesValidation`, called when the user saves, before the first await: the files listed at
  *   that moment are the ones of this work item; files added while it saves stay for the next one;
  * - `handleCreateUpdatePropertyValues`, called once the work item is created or updated, with its id.
- * A draft has no attachments in Plane: its files are dropped, with a message.
  */
 export const useModalAttachmentsUpload = () => {
   const { t } = useTranslation();
@@ -28,28 +27,42 @@ export const useModalAttachmentsUpload = () => {
     attachment: { createAttachment },
   } = useIssueDetail();
   const modalAttachments = useModalAttachments();
-  // this modal's generation: the list of a modal opened since then is not this one's
+  // the generation this modal opened
   const generationRef = useRef<number | null>(null);
   const savedFilesRef = useRef<TPendingAttachment[] | null>(null);
+  const closedFilesRef = useRef<TPendingAttachment[] | null>(null);
+  const isCurrentModal = useCallback(() => modalAttachments.generation === generationRef.current, [modalAttachments]);
 
-  // after the child list's own mount effect, which opens the generation
+  // Runs after the child list's mount effect, which opens the generation. On close, the files are kept:
+  // a draft saved on close is reported after the modal is gone, maybe once another one is open.
+  // (reset on mount: React's strict mode unmounts and mounts again once in development)
   useEffect(() => {
     generationRef.current = modalAttachments.generation;
-  }, [modalAttachments]);
+    closedFilesRef.current = null;
+    return () => {
+      if (isCurrentModal()) closedFilesRef.current = [...modalAttachments.files];
+    };
+  }, [modalAttachments, isCurrentModal]);
 
   const keepSavedFiles = useCallback(() => {
-    savedFilesRef.current = [...modalAttachments.files];
+    savedFilesRef.current = isCurrentModal() ? [...modalAttachments.files] : [];
     return true;
-  }, [modalAttachments]);
+  }, [modalAttachments, isCurrentModal]);
 
   const uploadSavedFiles = useCallback(
     async ({ issueId, projectId, workspaceSlug, isDraft }: TCreateUpdatePropertyValuesProps) => {
-      const isCurrentModal = modalAttachments.generation === generationRef.current;
+      const isCurrent = isCurrentModal();
       // saving a draft on close does not go through `keepSavedFiles`
-      const saved = savedFilesRef.current ?? (isCurrentModal ? [...modalAttachments.files] : []);
+      let saved = savedFilesRef.current ?? closedFilesRef.current ?? (isCurrent ? [...modalAttachments.files] : []);
       savedFilesRef.current = null;
+      closedFilesRef.current = null;
+      if (isCurrent) {
+        // a file removed from the list while the work item saves is not sent
+        const listedIds = new Set(modalAttachments.files.map(({ id }) => id));
+        saved = saved.filter(({ id }) => listedIds.has(id));
+        modalAttachments.remove(saved.map(({ id }) => id));
+      }
       if (saved.length === 0) return;
-      if (isCurrentModal) modalAttachments.removeMany(saved.map(({ id }) => id));
       if (isDraft) {
         setToast({
           type: TOAST_TYPE.WARNING,
@@ -76,7 +89,7 @@ export const useModalAttachmentsUpload = () => {
         });
       }
     },
-    [createAttachment, modalAttachments, t]
+    [createAttachment, modalAttachments, isCurrentModal, t]
   );
 
   return { keepSavedFiles, uploadSavedFiles };

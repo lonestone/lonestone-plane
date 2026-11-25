@@ -15,13 +15,13 @@ export interface IModalAttachmentsStore {
   generation: number;
   open: () => void;
   add: (files: File[]) => void;
-  remove: (id: string) => void;
-  removeMany: (ids: string[]) => void;
+  remove: (ids: string[]) => void;
 }
 
 /**
- * Files added in the work item modal, sent as attachments once the work item is saved. One modal is open at a
- * time; its list (rendered by `modal.tsx`) and its upload (run by `provider.tsx`) share this store.
+ * Files added in the work item modal, sent as attachments once the work item is saved. Its list (rendered by
+ * `modal.tsx`) and its upload (run by `provider.tsx`) share this store. A modal can open over another one (a
+ * create shortcut): the newest owns the list.
  */
 export class ModalAttachmentsStore implements IModalAttachmentsStore {
   files: TPendingAttachment[] = [];
@@ -34,7 +34,6 @@ export class ModalAttachmentsStore implements IModalAttachmentsStore {
       open: action,
       add: action,
       remove: action,
-      removeMany: action,
     });
   }
 
@@ -47,11 +46,7 @@ export class ModalAttachmentsStore implements IModalAttachmentsStore {
     this.files = [...this.files, ...files.map((file) => ({ id: uuidv4(), file }))];
   };
 
-  remove = (id: string) => {
-    this.files = this.files.filter((pending) => pending.id !== id);
-  };
-
-  removeMany = (ids: string[]) => {
+  remove = (ids: string[]) => {
     this.files = this.files.filter((pending) => !ids.includes(pending.id));
   };
 }
