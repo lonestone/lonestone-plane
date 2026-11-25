@@ -35,6 +35,7 @@ export type TWorkItem = {
   assignee_ids: string[];
   label_ids: string[];
   module_ids?: string[];
+  description_html?: string;
 };
 
 function uniqueSuffix(): string {

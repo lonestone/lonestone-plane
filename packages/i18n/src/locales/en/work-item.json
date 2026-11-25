@@ -266,6 +266,15 @@
       "click_to_downvote": "Click to downvote",
       "click_to_view_upvotes": "Click to view upvotes",
       "click_to_view_downvotes": "Click to view downvotes"
+    },
+    "modal_attachments": {
+      "attach_file": "Attach file",
+      "drop_overlay": "Add as attachment",
+      "remove": "Remove {name}",
+      "upload_failed_title": "Some attachments were not uploaded",
+      "upload_failed": "Not uploaded: {names}. Add them again from the work item with Attach.",
+      "draft_not_kept_title": "Attachments not kept",
+      "draft_not_kept": "Drafts don't keep attachments: add them again once the work item is created."
     }
   },
   "sub_work_item": {

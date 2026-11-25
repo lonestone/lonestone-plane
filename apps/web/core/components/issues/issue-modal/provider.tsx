@@ -13,6 +13,8 @@ import { IssueModalContext } from "@/components/issues/issue-modal/context";
 // hooks
 import { useProject } from "@/hooks/store/use-project";
 import { useProjectCollaboration } from "@/hooks/use-project-collaboration";
+// plane web components
+import { useModalAttachmentsUpload } from "@/plane-web/components/issues/issue-modal/attachments";
 
 export type TIssueModalProviderProps = {
   templateId?: string;
@@ -28,6 +30,7 @@ export const IssueModalProvider = observer(function IssueModalProvider(props: TI
   // store hooks
   const { joinedProjectIds } = useProject();
   const { canEditProjectWorkItems } = useProjectCollaboration();
+  const modalAttachments = useModalAttachmentsUpload();
   // Include collaborating guests — projectsWithCreatePermissions only covers member+.
   const projectIdsWithCreatePermissions = joinedProjectIds.filter((projectId) =>
     canEditProjectWorkItems(undefined, projectId)
@@ -50,8 +53,8 @@ export const IssueModalProvider = observer(function IssueModalProvider(props: TI
         setIssuePropertyValueErrors: () => {},
         getIssueTypeIdOnProjectChange: () => null,
         getActiveAdditionalPropertiesLength: () => 0,
-        handlePropertyValuesValidation: () => true,
-        handleCreateUpdatePropertyValues: () => Promise.resolve(),
+        handlePropertyValuesValidation: modalAttachments.keepSavedFiles,
+        handleCreateUpdatePropertyValues: modalAttachments.uploadSavedFiles,
         handleProjectEntitiesFetch: () => Promise.resolve(),
         handleTemplateChange: () => Promise.resolve(),
         handleConvert: () => Promise.resolve(),

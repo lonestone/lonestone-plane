@@ -31,6 +31,10 @@ export function projectMembersSettingsUrl(workspaceSlug: string, projectId: stri
   return `${WEB_URL}/${workspaceSlug}/settings/projects/${projectId}/members/`;
 }
 
+export function draftsUrl(workspaceSlug: string): string {
+  return `/${workspaceSlug}/drafts`;
+}
+
 export function inboxUrl(workspaceSlug: string): string {
   return `/${workspaceSlug}/notifications/`;
 }
