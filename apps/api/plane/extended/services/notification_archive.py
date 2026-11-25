@@ -2,12 +2,9 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""Archive, at once, every notification the inbox shows (LONESTONEP-14).
+"""Archive every notification the inbox shows (LONESTONEP-14).
 
-The selection mirrors what the upstream inbox lists by default
-(``NotificationViewSet.list`` and the web store's ``notificationIdsByWorkspaceId``):
-the receiver's work item notifications in the workspace, not archived, not snoozed,
-on the "All" or "Mentions" tab, narrowed by the type and unread filters.
+The selection copies upstream's ``NotificationViewSet.list``: keep them in step.
 """
 
 from django.db.models import Exists, OuterRef, Q
