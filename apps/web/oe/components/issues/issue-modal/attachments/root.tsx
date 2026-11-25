@@ -56,10 +56,10 @@ export const IssueModalAttachments = observer(function IssueModalAttachments(pro
   const frame = useDescriptionFrame(!isDraft);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Emptied when a modal opens, not when it closes: upstream may close the modal before the upload reads the
-  // files (`draft-issue-layout.tsx` saving a draft).
+  // A new list when a modal opens, not emptied when it closes: upstream may close the modal before the upload
+  // reads the files (`draft-issue-layout.tsx` saving a draft).
   useEffect(() => {
-    modalAttachments.clear();
+    modalAttachments.open();
   }, [modalAttachments]);
 
   const addFiles = useCallback(

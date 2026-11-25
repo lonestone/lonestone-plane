@@ -63,7 +63,7 @@ async function createdWorkItemId(project: ProjectFixture): Promise<string> {
 
 /** Saves and waits for upstream's success toast, shown once the attachments are sent. */
 async function saveAndWait(page: Page, dialog: Locator, button: string, toast: string): Promise<void> {
-  await dialog.getByRole("button", { name: button }).click();
+  await dialog.getByRole("button", { name: button, exact: true }).click();
   await expect(page.getByText(toast, { exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(dialog).toBeHidden();
 }
@@ -191,11 +191,28 @@ test("with Create more, the modal stays open and its list is emptied", async ({ 
   await dialog.getByRole("textbox", { name: "Title" }).fill("First");
   await attachWithButton(page, dialog, [pdfFile("first.pdf")]);
   await dialog.getByText("Create more", { exact: true }).click();
-  await dialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
 
   // the modal is open again, emptied for the next work item
   await expect(dialog.getByRole("textbox", { name: "Title" })).toHaveValue("");
   await expect(dialog.getByText("first.pdf", { exact: true })).toHaveCount(0);
   expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["first.pdf"]);
+});
+
+test("a file added while the work item saves is not sent with it", async ({ page, project }) => {
+  // the work item takes a while to be created, as on a slow network
+  await page.route("**/issues/", async (route) => {
+    if (route.request().method() === "POST") await new Promise((resolve) => setTimeout(resolve, 3000));
+    await route.fallback();
+  });
+  const dialog = await openCreateModal(page, project);
+  await dialog.getByRole("textbox", { name: "Title" }).fill("Saved first");
+  await attachWithButton(page, dialog, [pdfFile("saved.pdf")]);
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  // still saving: a file added now belongs to whatever comes next, not to this work item
+  await attachWithButton(page, dialog, [pdfFile("late.pdf")]);
+  await expect(page.getByText("Work item created successfully", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  expect(await attachmentNames(project, await createdWorkItemId(project))).toEqual(["saved.pdf"]);
 });

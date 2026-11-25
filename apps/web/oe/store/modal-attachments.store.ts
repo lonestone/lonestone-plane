@@ -11,9 +11,12 @@ export type TPendingAttachment = { id: string; file: File };
 
 export interface IModalAttachmentsStore {
   files: TPendingAttachment[];
+  /** Incremented when a modal opens: a modal only touches the list of its own generation. */
+  generation: number;
+  open: () => void;
   add: (files: File[]) => void;
   remove: (id: string) => void;
-  clear: () => void;
+  removeMany: (ids: string[]) => void;
 }
 
 /**
@@ -22,15 +25,23 @@ export interface IModalAttachmentsStore {
  */
 export class ModalAttachmentsStore implements IModalAttachmentsStore {
   files: TPendingAttachment[] = [];
+  generation = 0;
 
   constructor() {
     makeObservable(this, {
       files: observable.shallow,
+      generation: observable,
+      open: action,
       add: action,
       remove: action,
-      clear: action,
+      removeMany: action,
     });
   }
+
+  open = () => {
+    this.generation += 1;
+    this.files = [];
+  };
 
   add = (files: File[]) => {
     this.files = [...this.files, ...files.map((file) => ({ id: uuidv4(), file }))];
@@ -40,7 +51,7 @@ export class ModalAttachmentsStore implements IModalAttachmentsStore {
     this.files = this.files.filter((pending) => pending.id !== id);
   };
 
-  clear = () => {
-    this.files = [];
+  removeMany = (ids: string[]) => {
+    this.files = this.files.filter((pending) => !ids.includes(pending.id));
   };
 }

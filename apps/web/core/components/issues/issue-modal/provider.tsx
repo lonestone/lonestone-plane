@@ -30,7 +30,7 @@ export const IssueModalProvider = observer(function IssueModalProvider(props: TI
   // store hooks
   const { joinedProjectIds } = useProject();
   const { canEditProjectWorkItems } = useProjectCollaboration();
-  const uploadModalAttachments = useModalAttachmentsUpload();
+  const modalAttachments = useModalAttachmentsUpload();
   // Include collaborating guests — projectsWithCreatePermissions only covers member+.
   const projectIdsWithCreatePermissions = joinedProjectIds.filter((projectId) =>
     canEditProjectWorkItems(undefined, projectId)
@@ -53,8 +53,8 @@ export const IssueModalProvider = observer(function IssueModalProvider(props: TI
         setIssuePropertyValueErrors: () => {},
         getIssueTypeIdOnProjectChange: () => null,
         getActiveAdditionalPropertiesLength: () => 0,
-        handlePropertyValuesValidation: () => true,
-        handleCreateUpdatePropertyValues: uploadModalAttachments,
+        handlePropertyValuesValidation: modalAttachments.keepSavedFiles,
+        handleCreateUpdatePropertyValues: modalAttachments.uploadSavedFiles,
         handleProjectEntitiesFetch: () => Promise.resolve(),
         handleTemplateChange: () => Promise.resolve(),
         handleConvert: () => Promise.resolve(),
