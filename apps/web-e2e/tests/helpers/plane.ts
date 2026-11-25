@@ -165,7 +165,7 @@ export async function updateWorkItem(
   workspaceSlug: string,
   projectId: string,
   workItemId: string,
-  data: Partial<Pick<TWorkItem, "assignee_ids">>
+  data: Partial<Pick<TWorkItem, "assignee_ids">> & { description_html?: string }
 ): Promise<void> {
   await call(session, "PATCH", `/api/workspaces/${workspaceSlug}/projects/${projectId}/issues/${workItemId}/`, data);
 }
@@ -365,6 +365,11 @@ export type TNotification = {
 /** In-app notifications of the session's user (Inbox, "All" tab). */
 export async function listNotifications(session: PlaneSession, workspaceSlug: string): Promise<TNotification[]> {
   return call(session, "GET", `/api/workspaces/${workspaceSlug}/users/notifications/`);
+}
+
+/** In-app notifications of the session's user where they are @-mentioned (Inbox, "Mentions" tab). */
+export async function listMentions(session: PlaneSession, workspaceSlug: string): Promise<TNotification[]> {
+  return call(session, "GET", `/api/workspaces/${workspaceSlug}/users/notifications/?mentioned=true`);
 }
 
 /** Ids of the project subscribers (LONESTONEP-8). */

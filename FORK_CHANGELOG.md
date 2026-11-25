@@ -21,6 +21,7 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 | Inbox navigation (LONESTONEP-7)                      | (to be opened) | App Rail (Cloud, commercial self-hosted). Shipped in CE but disabled (`AppRailVisibilityProvider`, `isEnabled = false`)                                                                                                                                                           |
 | Installable PWA (LONESTONEP-3)                       | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: native iOS and Android apps (Cloud, commercial self-hosted)                                                                                                                                                            |
 | Attachments from the work item modal (LONESTONEP-16) | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: the `/attachment` editor block (Pro and above), which puts files in the description                                                                                                                                    |
+| Inbox archive all (LONESTONEP-14)                    | #16            | None: not in Plane (see "Features not in Plane"). Closest: per-notification archive (Community Edition), stacked notifications archive a group (Pro)                                                                                                                              |
 
 ## Upstream files touched
 
@@ -236,6 +237,17 @@ Left out on purpose: `apps/web/core/components/dropdowns/member/member-options.t
 | `packages/i18n/src/locales/en/work-item.json`              | Modified | `issue.modal_attachments` keys appended to the `issue` namespace                                                                                                                                                                                 |
 | `packages/i18n/src/locales/fr/work-item.json`              | Modified | Same keys, in French                                                                                                                                                                                                                             |
 
+### Inbox archive all (LONESTONEP-14)
+
+| File                                                                               | Status   | Change                                                                                          |
+| ---------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------- |
+| `apps/api/plane/tests/contract/app/test_notification_archive_app.py`               | Added    | Contract tests of the `/api/extended/` archive-all route                                        |
+| `apps/api/plane/tests/fork_builders.py`                                            | Modified | `make_notification`: a work item notification, shared by the LONESTONEP-14 tests                |
+| `apps/api/plane/tests/unit/extended/test_notification_archive.py`                  | Added    | Unit tests: which notifications of the inbox view are archived                                  |
+| `apps/web/core/components/workspace-notifications/sidebar/header/options/root.tsx` | Modified | Renders the fork `NotificationArchiveAllButton` after "Mark all as read" (one import, one line) |
+| `packages/i18n/src/locales/en/notification.json`                                   | Modified | `notification.archive_all` keys appended at the end                                             |
+| `packages/i18n/src/locales/fr/notification.json`                                   | Modified | `notification.archive_all` keys appended at the end                                             |
+
 ## Upstream dependencies
 
 Upstream files the fork relies on without changing them. Only the LONESTONEP-5 features are inventoried so far; the dependencies of the earlier features are still to be listed.
@@ -355,6 +367,14 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 | `apps/api/plane/app/views/workspace/draft.py` (`create_draft_to_issue`)                                                          | A draft becomes a work item with all its files turned into description assets: drafts get no attachments, the list is hidden for them                                                                                                                                               | `apps/web/oe/components/issues/issue-modal/attachments/root.tsx`                                                 |
 | `apps/web/core/components/issues/issue-layouts/` (list row quick actions)                                                        | The "Edit" item of a list row's menu opens the work item modal; the menu is the row's last button, without accessible name                                                                                                                                                          | `apps/web-e2e/tests/modal-attachments.spec.ts`                                                                   |
 
+### Inbox archive all (LONESTONEP-14)
+
+| Upstream file                                                        | What the fork relies on                                                                                                                                                                                                                                                                                                                                                    | Fork code                                                        |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `apps/web/core/store/notifications/workspace-notifications.store.ts` | `notifications`, `filters`, `currentNotificationTab`, `notificationIdsByWorkspaceId` (the cards the inbox shows), `setUnreadNotificationsCount`, `getUnreadNotificationsCount`                                                                                                                                                                                             | `apps/web/oe/components/workspace-notifications/archive-all.tsx` |
+| `apps/web/core/store/notifications/notification.ts`                  | `mutateNotification({ archived_at })`: the optimistic archive and its revert, as upstream's own `archiveNotification` does                                                                                                                                                                                                                                                 | `apps/web/oe/components/workspace-notifications/archive-all.tsx` |
+| `apps/api/plane/app/views/notification/base.py`                      | The filters of `NotificationViewSet.list` (work item notifications, mentions by `sender`, the `type` filters and their guest rule), copied with their quirk: "subscribed" means to leave out the work items assigned to the user but compares the assignee row's id with the work item's, so it never does; snoozed notifications are left out as the web store hides them | `apps/api/plane/extended/services/notification_archive.py`       |
+
 ## Features not in Plane
 
 ### Guest collaboration
@@ -388,3 +408,12 @@ Upstream files the fork relies on without changing them. Only the LONESTONEP-5 f
 - **Gaps**: hidden for drafts (Plane converts a draft's files to description assets); a file whose upload fails after the work item is created is named in a message, to add again with "Attach".
 - **Risk on upstream merges**: if Plane fills `handlePropertyValuesValidation` or `handleCreateUpdatePropertyValues` in CE (its custom properties), the provider must call both its code and the fork's. If the description field leaves `.editor-container`, or the modal stops being a `role="dialog"`, the list and the drop overlay no longer show: covered by `apps/web-e2e/tests/modal-attachments.spec.ts`.
 - **Upstream files**: `apps/web/core/components/issues/issue-modal/provider.tsx` (two swapped placeholders: the modal context's validation and create/update callbacks), `modal.tsx` (one line) and keys appended to `packages/i18n/src/locales/{en,fr}/work-item.json` (details under "Upstream files touched").
+
+### Inbox archive all (LONESTONEP-14)
+
+- **Not in Plane**: no plan archives every notification of the inbox at once, nor offers a multi-select on notifications (docs.plane.so/core-concepts/inbox; plane.so/pricing has no inbox row, its "Bulk Ops" are for work items). Community Edition archives one notification at a time and has "Mark all as read" in the inbox header. Closest: stacked notifications (Pro), where archiving a stack archives every notification of one work item.
+- **Why built anyway**: the inbox fills up faster than it can be archived one card at a time, and "Mark all as read" does not empty it.
+- **Decided by**: Tatiana Grange, on 2026-11-25.
+- **Risk on upstream merges**: if Plane ships its own "Archive all", it will clash in the inbox header (`sidebar/header/options/root.tsx`): keep only one button.
+- **Upstream files**: `apps/web/core/components/workspace-notifications/sidebar/header/options/root.tsx` (one import, one line), and keys appended to `packages/i18n/src/locales/{en,fr}/notification.json` (details under "Upstream files touched").
+- **Behaviour**: the button archives what the inbox view shows (tab, type and unread filters), loaded pages or not, after a confirmation. Snoozed notifications stay; the button is hidden in the archived and snoozed views.

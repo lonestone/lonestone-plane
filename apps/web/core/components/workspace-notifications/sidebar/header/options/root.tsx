@@ -14,6 +14,7 @@ import { Spinner } from "@plane/ui";
 // hooks
 import { useWorkspaceNotifications } from "@/hooks/store/notifications";
 import { usePlatformOS } from "@/hooks/use-platform-os";
+import { NotificationArchiveAllButton } from "@/plane-web/components/workspace-notifications/archive-all";
 // local imports
 import { NotificationFilter } from "../../filters/menu";
 import { NotificationHeaderMenuOption } from "./menu-option";
@@ -64,6 +65,8 @@ export const NotificationSidebarHeaderOptions = observer(function NotificationSi
           }}
         />
       </Tooltip>
+
+      <NotificationArchiveAllButton workspaceSlug={workspaceSlug} />
 
       {/* refetch current notifications */}
       <Tooltip tooltipContent={t("notification.options.refresh")} isMobile={isMobile} position="bottom">

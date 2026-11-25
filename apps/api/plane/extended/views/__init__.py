@@ -5,6 +5,7 @@
 from .announcement import AnnouncementListEndpoint, AnnouncementSeenEndpoint
 from .guest_collaboration import ProjectGuestCollaborationEndpoint
 from .issue_bulk_update import ProjectIssueBulkUpdateEndpoint
+from .notification_archive import NotificationArchiveAllEndpoint
 from .project_subscriber import ProjectSubscriberDetailEndpoint, ProjectSubscriberEndpoint
 from .project_template import (
     ProjectTemplateApplyEndpoint,
@@ -22,4 +23,5 @@ __all__ = (
     "ProjectSubscriberDetailEndpoint",
     "AnnouncementListEndpoint",
     "AnnouncementSeenEndpoint",
+    "NotificationArchiveAllEndpoint",
 )

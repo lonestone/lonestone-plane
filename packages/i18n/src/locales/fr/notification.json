@@ -53,6 +53,15 @@
       "1_week": "1 semaine",
       "2_weeks": "2 semaines",
       "custom": "Personnalisé"
+    },
+    "archive_all": {
+      "label": "Tout archiver",
+      "title": "Archiver toutes les notifications ?",
+      "content": "Toutes les notifications de cette vue seront archivées, y compris celles qui ne sont pas encore chargées. Vous les retrouverez avec « Afficher les archivés ».",
+      "confirm": "Tout archiver",
+      "loading": "Archivage",
+      "success": "Notifications archivées",
+      "error": "Les notifications n'ont pas pu être archivées. Réessayez."
     }
   }
 }
