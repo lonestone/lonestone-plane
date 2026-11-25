@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from rest_framework.test import APIClient
 
-from plane.db.models import Issue, State
+from plane.db.models import Issue, Notification, State
 from plane.tests.factories import ProjectFactory, ProjectMemberFactory, UserFactory, WorkspaceMemberFactory
 
 
@@ -45,6 +45,19 @@ def make_issue(project, name, author=None, **fields):
     issue = Issue(name=name, project=project, workspace=project.workspace, **fields)
     issue.save(created_by_id=author.id if author else project.created_by_id)
     return issue
+
+
+def make_notification(receiver, issue, sender="in_app:issue_activities:updated", **fields):
+    """An in-app notification of ``issue`` for ``receiver``, as the worker creates them."""
+    return Notification.objects.create(
+        workspace=issue.workspace,
+        project=issue.project,
+        entity_identifier=issue.id,
+        title=issue.name,
+        sender=sender,
+        receiver=receiver,
+        **{"entity_name": "issue", **fields},
+    )
 
 
 def client_for(user):

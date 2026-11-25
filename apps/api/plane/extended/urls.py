@@ -9,6 +9,7 @@ from django.urls import path
 from plane.extended.views import (
     AnnouncementListEndpoint,
     AnnouncementSeenEndpoint,
+    NotificationArchiveAllEndpoint,
     ProjectGuestCollaborationEndpoint,
     ProjectIssueBulkUpdateEndpoint,
     ProjectSubscriberDetailEndpoint,
@@ -68,5 +69,10 @@ urlpatterns = [
         "users/me/announcements/<str:key>/seen/",
         AnnouncementSeenEndpoint.as_view(),
         name="extended-announcement-seen",
+    ),
+    path(
+        "workspaces/<str:slug>/notifications/archive-all/",
+        NotificationArchiveAllEndpoint.as_view(),
+        name="extended-notifications-archive-all",
     ),
 ]

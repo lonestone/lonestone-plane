@@ -53,6 +53,15 @@
       "1_week": "1 week",
       "2_weeks": "2 weeks",
       "custom": "Custom"
+    },
+    "archive_all": {
+      "label": "Archive all",
+      "title": "Archive all notifications?",
+      "content": "Every notification of this view will be archived, including the ones not loaded yet. Find them again with \"Show archived\".",
+      "confirm": "Archive all",
+      "loading": "Archiving",
+      "success": "Notifications archived",
+      "error": "The notifications could not be archived. Try again."
     }
   }
 }
