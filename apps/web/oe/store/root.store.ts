@@ -5,6 +5,8 @@
  */
 
 import { CoreRootStore } from "@/store/root.store";
+import type { IModalAttachmentsStore } from "./modal-attachments.store";
+import { ModalAttachmentsStore } from "./modal-attachments.store";
 import type { IProjectTemplateStore } from "./templates/project-template.store";
 import { ProjectTemplateStore } from "./templates/project-template.store";
 
@@ -16,9 +18,11 @@ import { ProjectTemplateStore } from "./templates/project-template.store";
  */
 export class RootStore extends CoreRootStore {
   projectTemplates: IProjectTemplateStore;
+  modalAttachments: IModalAttachmentsStore;
 
   constructor() {
     super();
     this.projectTemplates = new ProjectTemplateStore(this);
+    this.modalAttachments = new ModalAttachmentsStore();
   }
 }

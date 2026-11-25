@@ -266,6 +266,15 @@
       "click_to_downvote": "Cliquez pour voter contre",
       "click_to_view_upvotes": "Cliquez pour voir les votes pour",
       "click_to_view_downvotes": "Cliquez pour voir les votes contre"
+    },
+    "modal_attachments": {
+      "attach_file": "Joindre un fichier",
+      "drop_overlay": "Ajouter la pièce jointe",
+      "remove": "Retirer {name}",
+      "upload_failed_title": "Des pièces jointes n’ont pas été envoyées",
+      "upload_failed": "Non envoyées : {names}. Ajoutez-les de nouveau depuis l’élément de travail avec « Joindre ».",
+      "draft_not_kept_title": "Pièces jointes non gardées",
+      "draft_not_kept": "Les brouillons ne gardent pas les pièces jointes : ajoutez-les de nouveau une fois l’élément de travail créé."
     }
   },
   "sub_work_item": {

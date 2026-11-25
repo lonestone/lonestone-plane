@@ -9,6 +9,8 @@ import { observer } from "mobx-react";
 import { useParams } from "next/navigation";
 // plane imports
 import type { EIssuesStoreType, TIssue } from "@plane/types";
+// plane web components
+import { IssueModalAttachments } from "@/plane-web/components/issues/issue-modal/attachments";
 // local imports
 import { CreateUpdateIssueModalBase } from "./base";
 import { IssueModalProvider } from "./provider";
@@ -53,6 +55,7 @@ export const CreateUpdateIssueModal = observer(function CreateUpdateIssueModal(p
       allowedProjectIds={props.allowedProjectIds}
     >
       <CreateUpdateIssueModalBase {...props} />
+      <IssueModalAttachments isDraft={props.isDraft} />
     </IssueModalProvider>
   );
 });
