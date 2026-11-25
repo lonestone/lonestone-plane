@@ -29,10 +29,11 @@ cp tools/release.env.example tools/release.env
 
 `tools/release.env` is gitignored, so nothing machine-specific reaches the repository. Environment variables take precedence over the file.
 
-| Variable            | Required | Meaning                                             |
-| ------------------- | -------- | --------------------------------------------------- |
-| `PLANE_REGISTRY_NS` | **yes**  | Docker Hub namespace to push to                     |
-| `PLANE_FORK_SUFFIX` | no       | Fork identifier in the tag, defaults to `lonestone` |
+| Variable            | Required | Meaning                                                                                                  |
+| ------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| `PLANE_REGISTRY_NS` | **yes**  | Docker Hub namespace to push to                                                                          |
+| `PLANE_FORK_SUFFIX` | no       | Fork identifier in the tag, defaults to `lonestone`                                                      |
+| `PLANE_PLATFORM`    | no       | Image architecture, defaults to `linux/amd64` (the server's, even when building on an Apple Silicon Mac) |
 
 `PLANE_REGISTRY_NS` has no default on purpose: the release script refuses to run without it, so nobody can accidentally publish to another developer's namespace.
 

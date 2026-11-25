@@ -18,6 +18,8 @@
 # the environment — nothing about one developer's setup is hardcoded here:
 #   PLANE_REGISTRY_NS    required. Docker Hub namespace to push to.
 #   PLANE_FORK_SUFFIX    optional, defaults to "lonestone".
+#   PLANE_PLATFORM       optional, defaults to "linux/amd64" (the server's
+#                        architecture, whatever the machine that builds).
 #
 # WARNING — VITE_* variables are frozen into the bundle at build time (web,
 # admin and space apps). If deployment URLs change, retagging is NOT enough:
@@ -86,6 +88,7 @@ fi
 
 REGISTRY_NS="${PLANE_REGISTRY_NS:-}"
 FORK_SUFFIX="${PLANE_FORK_SUFFIX:-lonestone}"
+PLATFORM="${PLANE_PLATFORM:-linux/amd64}"
 
 [ -n "$REGISTRY_NS" ] || die "PLANE_REGISTRY_NS is not set.
   Set the Docker Hub namespace to push to, either in the environment or in
@@ -112,6 +115,7 @@ fi
 GIT_SHA="$(git rev-parse --short HEAD)"
 echo "  commit: $GIT_SHA"
 echo "  images: ${#IMAGES[@]}"
+echo "  platform: $PLATFORM"
 
 if [ "$DO_PUSH" -eq 1 ] && [ "$DRY_RUN" -eq 0 ] && [ "$FORCE" -eq 0 ]; then
   info "checking that $TAG is not already published"
@@ -133,7 +137,8 @@ for entry in "${IMAGES[@]}"; do
   IFS='|' read -r name dockerfile context <<< "$entry"
   image="${REGISTRY_NS}/plane-${name}:${TAG}"
   info "build $image"
-  run docker build -f "$dockerfile" -t "$image" "${BUILD_ARGS[@]}" "$context" \
+  # ${a[@]+...}: macOS bash 3.2 treats an empty array as unset under `set -u`
+  run docker build --platform "$PLATFORM" -f "$dockerfile" -t "$image" ${BUILD_ARGS[@]+"${BUILD_ARGS[@]}"} "$context" \
     || die "build failed for plane-${name}"
   ok "$image"
 done
