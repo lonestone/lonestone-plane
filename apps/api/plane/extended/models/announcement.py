@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""One-time announcements of the fork to a user."""
+"""The fork's announcements a user has seen."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from plane.db.models import BaseModel
 
 
 class UserAnnouncement(BaseModel):
-    """Waiting while ``seen_at`` is empty; a user without a row never sees it."""
+    """One row per announcement the user has seen: the web app holds their content."""
 
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -21,7 +21,6 @@ class UserAnnouncement(BaseModel):
         related_name="extended_announcements",
     )
     key = models.CharField(max_length=64)
-    seen_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         db_table = "extended_user_announcements"

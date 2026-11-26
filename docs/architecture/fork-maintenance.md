@@ -239,16 +239,15 @@ New routes go in `plane/extended/urls.py`. The only upstream-touching lines for 
 
 **New fields on existing models** — this is the danger zone (see below); prefer companion models in `plane.extended` with `extended_*` tables.
 
-### Announcements
+### Announcements ("What's new")
 
-A one-time dialog told to some users after a release (for instance, LONESTONEP-8 tells project admins that they now follow their projects' new work items). Upstream's `GlobalModals` renders the fork's `Announcements` once for all: a new announcement does not touch upstream code.
+A dialog that tells users, once, what a release brings. Upstream's `GlobalModals` renders the fork's `Announcements`: a new release note touches no upstream code, and no server code.
 
-1. **Server**: add a key to `ANNOUNCEMENTS` in `plane/extended/services/announcements.py`. Its function returns the data the dialog needs, or `None` when it has nothing left to say (the dialog is then not shown).
-2. **Audience**: a data migration in `plane/extended/migrations/` queues the users, fixed at release time, with `queue_announcement_for(apps, key, user_ids)` from `migrations/_announcements.py`. Use historical models (`apps.get_model`) to pick the users.
-3. **Web**: add the key and its data type to `TAnnouncementData` (`oe/services/announcement.service.ts`), and a component to `ANNOUNCEMENT_CONTENTS` (`oe/components/announcements/registry.ts`). It renders the dialog's content and calls `close` to mark it seen. Texts go through i18n (en and fr).
-4. **Tests**: a contract test for its data and its migration (`tests/contract/app/test_announcements_app.py`), an e2e test of the dialog.
+1. **Content**: add an entry to `RELEASE_NOTES` in `apps/web/oe/components/announcements/release-notes.ts`: a `key` never changed once released (`release-notes.lonestone.<n>`), the release `date`, the `audience` (`admins`, `members` = admins and members, or `all`, by role in the current workspace) and the items (title, text and image alt in English and French, a screenshot in `assets/`).
+2. **Who sees it**: users of that audience who joined before `date` and have not seen it. The server only records which keys a user has seen (`extended_user_announcements`, `/api/extended/users/me/announcements/`).
+3. **Tests**: `apps/web-e2e/tests/whats-new.spec.ts` checks the dialog of the latest note. Set `NOTE` and the texts it checks to the new note, and add the previous key to `OLDER_NOTES` while that note stays in `RELEASE_NOTES`: the dialog shows the oldest note not seen.
 
-Users see one announcement at a time, oldest first, each once. To drop an announcement, remove its key from both registries; rows left in `extended_user_announcements` are ignored.
+Users see one note at a time, oldest first, each once. A note everyone has seen can be deleted with its images; its rows in `extended_user_announcements` are then ignored.
 
 ### Keeping upstream changes minimal
 

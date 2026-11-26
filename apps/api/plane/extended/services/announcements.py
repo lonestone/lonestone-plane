@@ -2,44 +2,23 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""One-time announcements of the fork (docs/architecture/fork-maintenance.md, "Announcements")."""
+"""The fork's announcements a user has seen (docs/architecture/fork-maintenance.md, "Announcements")."""
 
-from __future__ import annotations
-
-from collections.abc import Callable
-
-from django.utils import timezone
+import re
 
 from plane.extended.models import UserAnnouncement
-from plane.extended.services.project_subscribers import subscribed_admin_projects
 
-PROJECT_SUBSCRIBERS = "project_subscribers"
-
-
-def _project_subscribers(user) -> dict | None:
-    projects = subscribed_admin_projects(user)
-    return {"projects": projects} if projects else None
+KEY_MAX_LENGTH = UserAnnouncement._meta.get_field("key").max_length
+KEY_PATTERN = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{KEY_MAX_LENGTH - 1}}}")
 
 
-# key -> data of the announcement for the user, or None when it has nothing left to say (not shown).
-ANNOUNCEMENTS: dict[str, Callable[..., dict | None]] = {
-    PROJECT_SUBSCRIBERS: _project_subscribers,
-}
+def is_valid_key(key: str) -> bool:
+    return KEY_PATTERN.fullmatch(key) is not None
 
 
-def pending_announcements(user) -> list[dict]:
-    keys = (
-        UserAnnouncement.objects.filter(user=user, seen_at__isnull=True, key__in=ANNOUNCEMENTS)
-        .order_by("created_at")
-        .values_list("key", flat=True)
-    )
-    pending = []
-    for key in keys:
-        data = ANNOUNCEMENTS[key](user)
-        if data is not None:
-            pending.append({"key": key, "data": data})
-    return pending
+def seen_announcements(user) -> list[str]:
+    return list(UserAnnouncement.objects.filter(user=user).order_by("created_at").values_list("key", flat=True))
 
 
 def mark_announcement_seen(user, key: str) -> None:
-    UserAnnouncement.objects.filter(user=user, key=key, seen_at__isnull=True).update(seen_at=timezone.now())
+    UserAnnouncement.objects.get_or_create(user=user, key=key)

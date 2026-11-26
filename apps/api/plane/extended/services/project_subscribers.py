@@ -134,34 +134,6 @@ def forget_member(project_id: UUID | str, user_id: UUID | str) -> None:
     ProjectSubscriber.objects.filter(project_id=project_id, subscriber_id=user_id).delete(soft=False)
 
 
-def subscribed_admin_projects(user) -> list[dict]:
-    """Projects where the user is an active admin and has not opted out, by workspace then name."""
-    opted_out = ProjectSubscriber.objects.filter(subscriber=user, is_subscribed=False).values_list(
-        "project_id", flat=True
-    )
-    memberships = (
-        ProjectMember.objects.filter(
-            member=user,
-            is_active=True,
-            role=ROLE.ADMIN.value,
-            project__archived_at__isnull=True,
-            project__deleted_at__isnull=True,
-        )
-        .exclude(project_id__in=opted_out)
-        .select_related("project", "project__workspace")
-        .order_by("project__workspace__name", "project__name")
-    )
-    return [
-        {
-            "project_id": str(membership.project_id),
-            "project_name": membership.project.name,
-            "workspace_slug": membership.project.workspace.slug,
-            "workspace_name": membership.project.workspace.name,
-        }
-        for membership in memberships
-    ]
-
-
 def _activity(issue: Issue) -> dict:
     return {
         "id": "",
