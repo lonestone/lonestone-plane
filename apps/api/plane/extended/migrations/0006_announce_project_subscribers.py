@@ -2,31 +2,12 @@
 # SPDX-License-Identifier: AGPL-3.0-only
 # See the LICENSE file for details.
 
-"""LONESTONEP-8: tell the current project admins, once, that they now follow their projects."""
+"""LONESTONEP-8 queued a one-time announcement to the project admins here.
+
+That announcement is gone (0007): the migration stays, empty, for the migration history.
+"""
 
 from django.db import migrations
-
-from plane.extended.migrations._announcements import queue_announcement_for
-
-ANNOUNCEMENT = "project_subscribers"
-ADMIN = 20
-
-
-def queue_announcement(apps, schema_editor):
-    ProjectMember = apps.get_model("db", "ProjectMember")
-    admin_ids = (
-        ProjectMember.objects.filter(
-            is_active=True,
-            role=ADMIN,
-            deleted_at__isnull=True,
-            project__deleted_at__isnull=True,
-            project__archived_at__isnull=True,
-            member__is_bot=False,
-        )
-        .values_list("member_id", flat=True)
-        .distinct()
-    )
-    queue_announcement_for(apps, ANNOUNCEMENT, admin_ids)
 
 
 class Migration(migrations.Migration):
@@ -34,6 +15,4 @@ class Migration(migrations.Migration):
         ("extended", "0005_user_announcements"),
     ]
 
-    operations = [
-        migrations.RunPython(queue_announcement, migrations.RunPython.noop),
-    ]
+    operations = []

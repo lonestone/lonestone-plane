@@ -4,49 +4,72 @@
  * See the LICENSE file for details.
  */
 
-import type { FC } from "react";
+import { observer } from "mobx-react";
 import useSWR from "swr";
+import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
+import { useTranslation } from "@plane/i18n";
+import { Button } from "@plane/propel/button";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { announcementService } from "@/plane-web/services/announcement.service";
-import type { TAnnouncement, TAnnouncementData, TAnnouncementKey } from "@/plane-web/services/announcement.service";
-import { ANNOUNCEMENT_CONTENTS } from "./registry";
-import type { TAnnouncementProps } from "./registry";
+import { RELEASE_NOTES } from "./release-notes";
+import type { TLocalizedText, TReleaseNoteAudience } from "./release-notes";
 
-const SWR_KEY = "EXTENDED_ANNOUNCEMENTS";
+const SWR_KEY = "EXTENDED_ANNOUNCEMENTS_SEEN";
 
-function isKnown(announcement: { key: string; data: unknown }): announcement is TAnnouncement {
-  return announcement.key in ANNOUNCEMENT_CONTENTS;
-}
+const AUDIENCE_ROLES: Record<TReleaseNoteAudience, EUserPermissions[]> = {
+  admins: [EUserPermissions.ADMIN],
+  members: [EUserPermissions.ADMIN, EUserPermissions.MEMBER],
+  all: [EUserPermissions.ADMIN, EUserPermissions.MEMBER, EUserPermissions.GUEST],
+};
 
-/** One-time announcements of the fork, one dialog at a time. Rendered by upstream's GlobalModals. */
-export function Announcements() {
-  const { data, mutate } = useSWR(SWR_KEY, () => announcementService.list(), {
+/** The oldest release note the user has not seen and is meant for, in a dialog, once. */
+export const Announcements = observer(function Announcements() {
+  const { t, currentLocale } = useTranslation();
+  const { data: currentUser } = useUser();
+  const { allowPermissions } = useUserPermissions();
+  const { data: seen, mutate } = useSWR(SWR_KEY, () => announcementService.listSeen(), {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
 
-  const announcement = data?.find(isKnown);
-  if (!announcement) return null;
+  if (!seen || !currentUser) return null;
+  const joined = currentUser.date_joined.slice(0, 10);
+  const note = RELEASE_NOTES.find(
+    (candidate) =>
+      !seen.includes(candidate.key) &&
+      joined < candidate.date &&
+      allowPermissions(AUDIENCE_ROLES[candidate.audience], EUserPermissionsLevel.WORKSPACE)
+  );
+  if (!note) return null;
 
+  const text = (value: TLocalizedText) => (currentLocale === "fr" && value.fr) || value.en;
   const close = () => {
-    void mutate(
-      data?.filter((pending) => pending.key !== announcement.key),
-      { revalidate: false }
-    );
-    void announcementService.markSeen(announcement.key).catch(() => undefined);
+    void mutate([...seen, note.key], { revalidate: false });
+    void announcementService.markSeen(note.key).catch(() => undefined);
   };
 
   return (
     <ModalCore isOpen handleClose={close} position={EModalPosition.CENTER} width={EModalWidth.XXL}>
-      <AnnouncementContent announcement={announcement} close={close} />
+      <div className="flex max-h-[70vh] flex-col gap-6 overflow-y-auto p-5">
+        <h3 className="text-16 font-medium">{t("whats_new")}</h3>
+        {note.items.map((item) => (
+          <section key={item.title.en} className="flex flex-col gap-2">
+            <h4 className="text-14 font-medium">{text(item.title)}</h4>
+            <p className="text-13 text-secondary">{text(item.body)}</p>
+            <img
+              src={item.image}
+              alt={text(item.imageAlt)}
+              className="w-full rounded-md border-[0.5px] border-subtle"
+            />
+          </section>
+        ))}
+      </div>
+      <div className="flex justify-end border-t-[0.5px] border-subtle px-5 py-4">
+        <Button variant="primary" onClick={close}>
+          {t("product_tour.actions.got_it")}
+        </Button>
+      </div>
     </ModalCore>
   );
-}
-
-function AnnouncementContent<K extends TAnnouncementKey>(props: {
-  announcement: { key: K; data: TAnnouncementData[K] };
-  close: () => void;
-}) {
-  const Content: FC<TAnnouncementProps<K>> = ANNOUNCEMENT_CONTENTS[props.announcement.key];
-  return <Content data={props.announcement.data} close={props.close} />;
-}
+});
