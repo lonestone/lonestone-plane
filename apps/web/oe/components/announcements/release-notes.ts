@@ -30,7 +30,7 @@ export const RELEASE_NOTES: TReleaseNote[] = [
     audience: "members",
     items: [
       {
-        title: { en: "Archive your whole inbox", fr: "Archivez toute votre boîte de réception" },
+        title: { en: "Archive your whole inbox", fr: "Archivez toute votre Inbox" },
         body: {
           en: "Archive all, next to Mark all as read, archives every notification of the current view after a confirmation. Find them again with Show archived.",
           fr: "Archive all, à côté de Mark all as read, archive après confirmation toutes les notifications de la vue affichée. Vous les retrouvez avec Show archived.",
@@ -38,7 +38,7 @@ export const RELEASE_NOTES: TReleaseNote[] = [
         image: archiveAll,
         imageAlt: {
           en: "The Archive all button in the inbox header",
-          fr: "Le bouton Archive all dans l'en-tête de la boîte de réception",
+          fr: "Le bouton Archive all dans l'en-tête de l'Inbox",
         },
       },
       {
