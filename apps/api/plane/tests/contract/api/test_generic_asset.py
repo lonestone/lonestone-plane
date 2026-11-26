@@ -12,12 +12,13 @@ from.
 """
 
 from unittest import mock
+from urllib.parse import parse_qs, urlsplit
 from uuid import uuid4
 
 import pytest
 from rest_framework import status
 
-from plane.db.models import FileAsset, User, Workspace, WorkspaceMember
+from plane.db.models import FileAsset, Project, ProjectMember, User, Workspace, WorkspaceMember
 
 
 @pytest.fixture
@@ -141,3 +142,26 @@ class TestGenericAssetCrossWorkspaceIDOR:
         assert response.status_code == status.HTTP_204_NO_CONTENT, f"Got {response.status_code}: {response.data!r}"
         asset.refresh_from_db()
         assert asset.is_uploaded is True
+
+
+@pytest.mark.contract
+@pytest.mark.django_db
+def test_project_member_can_get_signed_description_image(api_key_client, workspace, create_user):
+    project = Project.objects.create(name="MCP images", identifier="MCP", workspace=workspace, created_by=create_user)
+    ProjectMember.objects.create(workspace=workspace, project=project, member=create_user, role=20)
+    asset = FileAsset.objects.create(
+        attributes={"name": "description.png", "type": "image/png", "size": 10},
+        asset=f"{workspace.id}/description.png",
+        size=10,
+        workspace=workspace,
+        project=project,
+        created_by=create_user,
+        entity_type=FileAsset.EntityTypeContext.ISSUE_DESCRIPTION,
+        is_uploaded=True,
+    )
+    response = api_key_client.get(f"/api/v1/workspaces/{workspace.slug}/assets/{asset.id}/")
+
+    assert response.status_code == status.HTTP_200_OK
+    assert response.data["asset_id"] == str(asset.id)
+    assert response.data["asset_type"] == "image/png"
+    assert parse_qs(urlsplit(response.data["asset_url"]).query)["X-Amz-Signature"]
