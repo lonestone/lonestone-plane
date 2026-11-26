@@ -8,7 +8,7 @@ from rest_framework import status
 from rest_framework.response import Response
 
 from plane.app.views.base import BaseAPIView
-from plane.extended.services.announcements import KEY_PATTERN, mark_announcement_seen, seen_announcements
+from plane.extended.services.announcements import is_valid_key, mark_announcement_seen, seen_announcements
 
 
 class AnnouncementListEndpoint(BaseAPIView):
@@ -18,7 +18,7 @@ class AnnouncementListEndpoint(BaseAPIView):
 
 class AnnouncementSeenEndpoint(BaseAPIView):
     def post(self, request, key):
-        if not KEY_PATTERN.match(key):
+        if not is_valid_key(key):
             return Response({"error": "Invalid announcement key"}, status=status.HTTP_400_BAD_REQUEST)
         mark_announcement_seen(request.user, key)
         return Response(status=status.HTTP_204_NO_CONTENT)

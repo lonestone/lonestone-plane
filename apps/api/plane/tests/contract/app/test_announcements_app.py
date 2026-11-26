@@ -48,7 +48,7 @@ class TestAnnouncements:
         assert first.status_code == second.status_code == status.HTTP_204_NO_CONTENT
         assert UserAnnouncement.objects.filter(user=create_user, key=KEY).count() == 1
 
-    @pytest.mark.parametrize("key", ["Release", "-release", "a" * 65, "notes%20lonestone"])
+    @pytest.mark.parametrize("key", ["Release", "-release", "a" * 65, "notes%20lonestone", "abc%0A", "a" * 64 + "%0A"])
     def test_rejects_a_malformed_key(self, session_client, project, key):
         assert session_client.post(seen_url(key)).status_code == status.HTTP_400_BAD_REQUEST
         assert not UserAnnouncement.objects.exists()
@@ -70,11 +70,13 @@ class TestAnnouncements:
             status.HTTP_403_FORBIDDEN,
         )
 
-    def test_migration_drops_the_project_subscribers_announcement(self, workspace, project, create_user):
-        UserAnnouncement.objects.create(user=create_user, key="project_subscribers")
-        UserAnnouncement.objects.create(user=create_user, key=KEY)
+    def test_migration_0007_drops_only_the_project_subscribers_announcement(self, workspace, project, create_user):
+        member = make_user(workspace, project, 15)
+        for user in (create_user, member):
+            UserAnnouncement.objects.create(user=user, key="project_subscribers")
+        UserAnnouncement.objects.create(user=member, key=KEY)
         migration = importlib.import_module("plane.extended.migrations.0007_announcements_seen_only")
 
         migration.drop_project_subscribers_announcement(apps, None)
 
-        assert list(UserAnnouncement.objects.values_list("key", flat=True)) == [KEY]
+        assert list(UserAnnouncement.objects.values_list("user_id", "key")) == [(member.id, KEY)]

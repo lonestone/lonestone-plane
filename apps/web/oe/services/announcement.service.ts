@@ -14,7 +14,6 @@ export class AnnouncementService extends APIService {
 
   private url = "/api/extended/users/me/announcements/";
 
-  /** Keys of the announcements the signed-in user has seen. */
   async listSeen(): Promise<string[]> {
     return this.get(this.url)
       .then((response) => response?.data?.seen ?? [])

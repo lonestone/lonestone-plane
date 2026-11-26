@@ -8,7 +8,12 @@ import re
 
 from plane.extended.models import UserAnnouncement
 
-KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+KEY_MAX_LENGTH = UserAnnouncement._meta.get_field("key").max_length
+KEY_PATTERN = re.compile(rf"[a-z0-9][a-z0-9._-]{{0,{KEY_MAX_LENGTH - 1}}}")
+
+
+def is_valid_key(key: str) -> bool:
+    return KEY_PATTERN.fullmatch(key) is not None
 
 
 def seen_announcements(user) -> list[str]:

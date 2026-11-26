@@ -245,7 +245,7 @@ A dialog that tells users, once, what a release brings. Upstream's `GlobalModals
 
 1. **Content**: add an entry to `RELEASE_NOTES` in `apps/web/oe/components/announcements/release-notes.ts`: a `key` never changed once released (`release-notes.lonestone.<n>`), the release `date`, the `audience` (`admins`, `members` = admins and members, or `all`, by role in the current workspace) and the items (title, text and image alt in English and French, a screenshot in `assets/`).
 2. **Who sees it**: users of that audience who joined before `date` and have not seen it. The server only records which keys a user has seen (`extended_user_announcements`, `/api/extended/users/me/announcements/`).
-3. **Tests**: `apps/web-e2e/tests/whats-new.spec.ts` checks the dialog of the latest note; update its texts with the note.
+3. **Tests**: `apps/web-e2e/tests/whats-new.spec.ts` checks the dialog of the latest note. Set `NOTE` and the texts it checks to the new note, and add the previous key to `OLDER_NOTES` while that note stays in `RELEASE_NOTES`: the dialog shows the oldest note not seen.
 
 Users see one note at a time, oldest first, each once. A note everyone has seen can be deleted with its images; its rows in `extended_user_announcements` are then ignored.
 

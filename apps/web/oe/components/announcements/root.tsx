@@ -4,12 +4,14 @@
  * See the LICENSE file for details.
  */
 
+import { useState } from "react";
 import { observer } from "mobx-react";
 import useSWR from "swr";
 import { EUserPermissions, EUserPermissionsLevel } from "@plane/constants";
 import { useTranslation } from "@plane/i18n";
 import { Button } from "@plane/propel/button";
 import { EModalPosition, EModalWidth, ModalCore } from "@plane/ui";
+import { renderFormattedPayloadDate } from "@plane/utils";
 import { useUser, useUserPermissions } from "@/hooks/store/user";
 import { announcementService } from "@/plane-web/services/announcement.service";
 import { RELEASE_NOTES } from "./release-notes";
@@ -28,13 +30,16 @@ export const Announcements = observer(function Announcements() {
   const { t, currentLocale } = useTranslation();
   const { data: currentUser } = useUser();
   const { allowPermissions } = useUserPermissions();
+  // Closed for this session: the next note waits for the next load, so one close never skips an unread note.
+  const [isClosed, setIsClosed] = useState(false);
   const { data: seen, mutate } = useSWR(SWR_KEY, () => announcementService.listSeen(), {
     revalidateOnFocus: false,
     shouldRetryOnError: false,
   });
 
-  if (!seen || !currentUser) return null;
-  const joined = currentUser.date_joined.slice(0, 10);
+  if (isClosed || !seen || !currentUser) return null;
+  // The local day: a string would be cut to its UTC day
+  const joined = renderFormattedPayloadDate(new Date(currentUser.date_joined)) ?? "";
   const note = RELEASE_NOTES.find(
     (candidate) =>
       !seen.includes(candidate.key) &&
@@ -45,8 +50,10 @@ export const Announcements = observer(function Announcements() {
 
   const text = (value: TLocalizedText) => (currentLocale === "fr" && value.fr) || value.en;
   const close = () => {
+    setIsClosed(true);
     void mutate([...seen, note.key], { revalidate: false });
-    void announcementService.markSeen(note.key).catch(() => undefined);
+    // Not reopened on failure: the note shows again at the next load.
+    announcementService.markSeen(note.key).catch((error) => console.error("Announcements -> markSeen", error));
   };
 
   return (

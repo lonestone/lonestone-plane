@@ -15,7 +15,7 @@ export type TReleaseNoteAudience = "admins" | "members" | "all";
 export type TReleaseNote = {
   /** Recorded as seen by the server: never change it once released. */
   key: string;
-  /** Users who joined on or after this day do not see the note. */
+  /** Users who joined on or after this day (their local day) do not see the note. */
   date: string;
   /** By role in the current workspace: "members" are admins and members, without guests. */
   audience: TReleaseNoteAudience;
@@ -30,7 +30,7 @@ export const RELEASE_NOTES: TReleaseNote[] = [
     audience: "members",
     items: [
       {
-        title: { en: "Archive your whole inbox", fr: "Archivez toute votre Inbox" },
+        title: { en: "Archive your whole inbox", fr: "Archivez toute votre boîte de réception" },
         body: {
           en: "Archive all, next to Mark all as read, archives every notification of the current view after a confirmation. Find them again with Show archived.",
           fr: "Archive all, à côté de Mark all as read, archive après confirmation toutes les notifications de la vue affichée. Vous les retrouvez avec Show archived.",
@@ -38,7 +38,7 @@ export const RELEASE_NOTES: TReleaseNote[] = [
         image: archiveAll,
         imageAlt: {
           en: "The Archive all button in the inbox header",
-          fr: "Le bouton Archive all dans l'en-tête de l'Inbox",
+          fr: "Le bouton Archive all dans l'en-tête de la boîte de réception",
         },
       },
       {
