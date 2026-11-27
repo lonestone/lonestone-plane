@@ -23,10 +23,18 @@ Registry of what this fork changes in upstream Plane and relies on from it, grou
 | Attachments from the work item modal (LONESTONEP-16) | (to be opened) | None: not in Plane (see "Features not in Plane"). Closest: the `/attachment` editor block (Pro and above), which puts files in the description                                                                                                                                    |
 | Inbox archive all (LONESTONEP-14)                    | #16            | None: not in Plane (see "Features not in Plane"). Closest: per-notification archive (Community Edition), stacked notifications archive a group (Pro)                                                                                                                              |
 | What's new dialog                                    | (to be opened) | "What's new" (Community Edition): the help menu opens an iframe of `INSTANCE_CHANGELOG_URL`. The fork's dialog opens by itself, once, by role, with the fork's notes; it replaces the one-time announcement of LONESTONEP-8                                                       |
+| Public asset signing                                 | —              | Partial backport of [Plane #9657](https://github.com/makeplane/plane/pull/9657) for reading description images through the public asset API                                                                                                                                       |
 
 ## Upstream files touched
 
 Status is relative to upstream: `Modified`, `Added` or `Deleted`.
+
+### Public asset signing
+
+| File                                                      | Status   | Change                                                                                       |
+| --------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `apps/api/plane/api/views/asset.py`                       | Modified | Signs download URLs with the supported storage constructor after checking project membership |
+| `apps/api/plane/tests/contract/api/test_generic_asset.py` | Modified | Checks that project members get a signed URL for a description image                         |
 
 ### Fork tooling and conventions
 

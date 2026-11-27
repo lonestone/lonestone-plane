@@ -18,7 +18,7 @@ from drf_spectacular.utils import OpenApiExample, OpenApiRequest
 from plane.bgtasks.storage_metadata_task import get_asset_object_metadata
 from plane.settings.storage import S3Storage
 from plane.utils.path_validator import sanitize_filename
-from plane.db.models import FileAsset, User, Workspace
+from plane.db.models import FileAsset, ProjectMember, User, Workspace
 from plane.app.permissions import WorkspaceUserPermission
 from plane.api.views.base import BaseAPIView
 from plane.api.serializers import (
@@ -437,6 +437,17 @@ class GenericAssetEndpoint(BaseAPIView):
             # Get the asset
             asset = FileAsset.objects.get(id=asset_id, workspace_id=workspace.id, is_deleted=False)
 
+            if asset.project_id is not None and not ProjectMember.objects.filter(
+                member=request.user,
+                workspace_id=workspace.id,
+                project_id=asset.project_id,
+                is_active=True,
+            ).exists():
+                return Response(
+                    {"error": "You don't have access to this asset."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
             # Check if the asset exists and is uploaded
             if not asset.is_uploaded:
                 return Response(
@@ -448,7 +459,7 @@ class GenericAssetEndpoint(BaseAPIView):
             # Force attachment disposition for script-capable MIME types (e.g. SVG)
             # to prevent same-origin XSS when the asset URL shares the app's origin
             # (default MinIO self-hosted setup).
-            storage = S3Storage(request=request, is_server=True)
+            storage = S3Storage(request=request)
             asset_mime_type = (asset.attributes.get("type") or "").split(";")[0].strip().lower()
             disposition = (
                 "attachment" if asset_mime_type in settings.SCRIPT_CAPABLE_MIME_TYPES else "inline"
